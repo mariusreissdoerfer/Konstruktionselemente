@@ -1,16 +1,21 @@
 // Berechnung einer Bolzenverbindung (Stange in Gabel, durch Bolzen verbunden)
 // nach Roloff/Matek Maschinenelemente.
 //
-// Geometrie (Längsachse des Bolzens):
+// Geometrie (Längsachse des Bolzens), mit optionalem Spalt a je Seite:
 //
-//     │ Gabel │      Stange      │ Gabel │
-//     │  t_G  │       t_S        │  t_G  │
-//     ────────●══════════════════●────────   ← Bolzen, Durchmesser d
-//                     ▲ F  (Zugkraft der Stange)
+//   │ Gabel │ a │      Stange      │ a │ Gabel │
+//   │  t_G  │   │       t_S        │   │  t_G  │
+//   ─────────────●══════════════════●─────────────   ← Bolzen, Durchmesser d
+//                       ▲ F  (Zugkraft der Stange)
 //
-// Nachgewiesen werden: Flächenpressung (Lochleibung) in Stange und Gabel,
+// Optionen: Buchsen in den Bohrungen (Außendurchmesser d_a, eigener
+// Werkstoff) und ein Kugelgelenk/Gelenklager in der Stange.
+//
+// Nachgewiesen werden: Flächenpressung (Lochleibung) in Stange und Gabel
+// (bzw. innen/außen bei Buchse, bzw. Lagerpressung bei Kugelgelenk),
 // Abscherung des Bolzens (zweischnittig) und Biegung des Bolzens.
 
+import { fmt } from '../format'
 import type { Einbaufall, Lastfall, Material, Nachweis } from '../types'
 
 /** Zulässige Spannungen als Anteil von R_m, abhängig vom Lastfall.
@@ -56,6 +61,22 @@ export const EINBAUFALL_INFO: Record<
   },
 }
 
+/** Optionale Buchse in den Bohrungen. */
+export interface BuchseConfig {
+  /** Außendurchmesser der Buchse in mm */
+  da: number
+  /** Buchsenwerkstoff */
+  material: Material
+}
+
+/** Optionales Kugelgelenk / Gelenklager in der Stange. */
+export interface KugelgelenkConfig {
+  /** Lagerbreite B in mm (tragende Breite des Innenrings) */
+  B: number
+  /** zulässige spezifische Lagerbelastung in N/mm² (herstellerabhängig) */
+  pzul: number
+}
+
 export interface BolzenInput {
   /** Belastung (Stangenkraft) F in N */
   F: number
@@ -65,9 +86,15 @@ export interface BolzenInput {
   tS: number
   /** Gabeldicke je Lasche t_G in mm */
   tG: number
+  /** Spalt a zwischen Stange und je Gabellasche in mm */
+  spalt: number
   einbaufall: Einbaufall
   lastfall: Lastfall
   material: Material
+  /** optionale Buchse */
+  buchse?: BuchseConfig | null
+  /** optionales Kugelgelenk in der Stange */
+  kugelgelenk?: KugelgelenkConfig | null
   /** optionale Überschreibung der zulässigen-Faktoren (sonst aus Lastfall) */
   faktoren?: ZulFaktoren
 }
@@ -100,24 +127,26 @@ export function widerstandsmoment(d: number): number {
 }
 
 /**
- * Maßgebendes Biegemoment des Bolzens in N·mm, abhängig vom Einbaufall.
- *   Fall 1: M_b = F/8 · (t_S + 2·t_G)
- *   Fall 2: M_b = F/8 · t_S
- *   Fall 3: M_b = F/4 · t_G
+ * Maßgebendes Biegemoment des Bolzens in N·mm, abhängig vom Einbaufall und
+ * dem Spalt a zwischen Stange und Gabel:
+ *   Fall 1: M_b = F/8 · (t_S + 2·t_G + 4·a)
+ *   Fall 2: M_b = F/8 · (t_S + 2·a)
+ *   Fall 3: M_b = F/4 · (t_G + 2·a)
  */
 export function biegemoment(
   F: number,
   tS: number,
   tG: number,
+  spalt: number,
   einbaufall: Einbaufall,
 ): number {
   switch (einbaufall) {
     case 1:
-      return (F / 8) * (tS + 2 * tG)
+      return (F / 8) * (tS + 2 * tG + 4 * spalt)
     case 2:
-      return (F / 8) * tS
+      return (F / 8) * (tS + 2 * spalt)
     case 3:
-      return (F / 4) * tG
+      return (F / 4) * (tG + 2 * spalt)
   }
 }
 
@@ -125,11 +154,11 @@ export function biegemoment(
 export function biegemomentFormel(einbaufall: Einbaufall): string {
   switch (einbaufall) {
     case 1:
-      return 'M_b = F/8 · (t_S + 2·t_G)'
+      return 'M_b = F/8 · (t_S + 2·t_G + 4·a)'
     case 2:
-      return 'M_b = F/8 · t_S'
+      return 'M_b = F/8 · (t_S + 2·a)'
     case 3:
-      return 'M_b = F/4 · t_G'
+      return 'M_b = F/4 · (t_G + 2·a)'
   }
 }
 
@@ -159,61 +188,117 @@ function nachweis(
 
 /** Vollständige Berechnung (Nachweis) der Bolzenverbindung. */
 export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
-  const { F, d, tS, tG, einbaufall, lastfall, material } = input
+  const { F, d, tS, tG, spalt, einbaufall, lastfall, material } = input
+  const buchse = input.buchse ?? null
+  const kugelgelenk = input.kugelgelenk ?? null
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[lastfall]
-  const { Rm } = material
-
-  const pZul = faktoren.cP * Rm
-  const sigmaZul = faktoren.cSigma * Rm
-  const tauZul = faktoren.cTau * Rm
+  const { cP, cSigma, cTau } = faktoren
 
   const A = bolzenflaeche(d)
   const Wb = widerstandsmoment(d)
-  const Mb = biegemoment(F, tS, tG, einbaufall)
+  const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
 
-  // 1) Flächenpressung Stange (Bolzen trägt F über die Stangendicke)
-  const pS = F / (d * tS)
-  // 2) Flächenpressung Gabel (zwei Laschen teilen sich F)
-  const pG = F / (2 * d * tG)
-  // 3) Abscherung – zweischnittig
-  const tau = F / (2 * A)
-  // 4) Biegung
-  const sigmaB = Mb / Wb
+  const pZulMat = (m: Material) => cP * m.Rm
+  const nachweise: Nachweis[] = []
 
-  const nachweise: Nachweis[] = [
-    nachweis(
-      'Flächenpressung Stange',
-      'p_S = F / (d · t_S)',
-      `${F} / (${d} · ${tS})`,
-      pS,
-      pZul,
-    ),
-    nachweis(
-      'Flächenpressung Gabel',
-      'p_G = F / (2 · d · t_G)',
-      `${F} / (2 · ${d} · ${tG})`,
-      pG,
-      pZul,
-    ),
+  // ---- Flächenpressung Stange (bzw. Kugelgelenk) ----
+  if (kugelgelenk) {
+    const p = F / (d * kugelgelenk.B)
+    nachweise.push(
+      nachweis(
+        'Kugelgelenk – Lagerpressung',
+        'p = F / (d · B)',
+        `${fmt(F)} / (${fmt(d)} · ${fmt(kugelgelenk.B)})`,
+        p,
+        kugelgelenk.pzul,
+      ),
+    )
+  } else if (buchse) {
+    nachweise.push(
+      nachweis(
+        'Pressung Stange innen (Bolzen–Buchse)',
+        'p = F / (d · t_S)',
+        `${fmt(F)} / (${fmt(d)} · ${fmt(tS)})`,
+        F / (d * tS),
+        pZulMat(buchse.material),
+      ),
+    )
+    nachweise.push(
+      nachweis(
+        'Pressung Stange außen (Buchse–Stange)',
+        'p = F / (d_a · t_S)',
+        `${fmt(F)} / (${fmt(buchse.da)} · ${fmt(tS)})`,
+        F / (buchse.da * tS),
+        pZulMat(material),
+      ),
+    )
+  } else {
+    nachweise.push(
+      nachweis(
+        'Flächenpressung Stange',
+        'p_S = F / (d · t_S)',
+        `${fmt(F)} / (${fmt(d)} · ${fmt(tS)})`,
+        F / (d * tS),
+        pZulMat(material),
+      ),
+    )
+  }
+
+  // ---- Flächenpressung Gabel ----
+  if (buchse) {
+    nachweise.push(
+      nachweis(
+        'Pressung Gabel innen (Bolzen–Buchse)',
+        'p = F / (2 · d · t_G)',
+        `${fmt(F)} / (2 · ${fmt(d)} · ${fmt(tG)})`,
+        F / (2 * d * tG),
+        pZulMat(buchse.material),
+      ),
+    )
+    nachweise.push(
+      nachweis(
+        'Pressung Gabel außen (Buchse–Gabel)',
+        'p = F / (2 · d_a · t_G)',
+        `${fmt(F)} / (2 · ${fmt(buchse.da)} · ${fmt(tG)})`,
+        F / (2 * buchse.da * tG),
+        pZulMat(material),
+      ),
+    )
+  } else {
+    nachweise.push(
+      nachweis(
+        'Flächenpressung Gabel',
+        'p_G = F / (2 · d · t_G)',
+        `${fmt(F)} / (2 · ${fmt(d)} · ${fmt(tG)})`,
+        F / (2 * d * tG),
+        pZulMat(material),
+      ),
+    )
+  }
+
+  // ---- Abscherung (zweischnittig) ----
+  nachweise.push(
     nachweis(
       'Abscherung (zweischnittig)',
       'τ_a = F / (2 · A) ,  A = π·d²/4',
-      `${F} / (2 · ${round(A)})`,
-      tau,
-      tauZul,
+      `${fmt(F)} / (2 · ${fmt(A)})`,
+      F / (2 * A),
+      cTau * material.Rm,
     ),
+  )
+
+  // ---- Biegung ----
+  nachweise.push(
     nachweis(
       'Biegung',
       `σ_b = M_b / W ,  ${biegemomentFormel(einbaufall)}`,
-      `${round(Mb)} / ${round(Wb)}`,
-      sigmaB,
-      sigmaZul,
+      `${fmt(Mb)} / ${fmt(Wb)}`,
+      Mb / Wb,
+      cSigma * material.Rm,
     ),
-  ]
-
-  const minSicherheit = round(
-    Math.min(...nachweise.map((n) => n.sicherheit)),
   )
+
+  const minSicherheit = round(Math.min(...nachweise.map((n) => n.sicherheit)))
   const bestanden = nachweise.every((n) => n.erfuellt)
 
   return { Mb, Wb, A, faktoren, nachweise, minSicherheit, bestanden }
@@ -243,7 +328,7 @@ export interface AuslegungErgebnis {
 export function legeBolzenAus(
   input: Omit<BolzenInput, 'd'>,
 ): AuslegungErgebnis {
-  const { F, tS, tG, einbaufall, lastfall, material } = input
+  const { F, tS, tG, spalt, einbaufall, lastfall, material } = input
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[lastfall]
   const tauZul = faktoren.cTau * material.Rm
   const sigmaZul = faktoren.cSigma * material.Rm
@@ -252,7 +337,7 @@ export function legeBolzenAus(
   const dAbscherung = Math.sqrt((2 * F) / (Math.PI * tauZul))
 
   // Biegung: σ = M_b/(π·d³/32) ≤ σ_zul  →  d ≥ (32·M_b/(π·σ_zul))^(1/3)
-  const Mb = biegemoment(F, tS, tG, einbaufall)
+  const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
   const dBiegung = Math.cbrt((32 * Mb) / (Math.PI * sigmaZul))
 
   const massgebend = dBiegung >= dAbscherung ? 'Biegung' : 'Abscherung'

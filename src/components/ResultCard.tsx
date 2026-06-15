@@ -1,3 +1,4 @@
+import { fmt } from '../calc/format'
 import type { Nachweis } from '../calc/types'
 
 function Ampel({ erfuellt }: { erfuellt: boolean }) {
@@ -44,7 +45,7 @@ export function ResultCard({ n }: { n: Nachweis }) {
           Rechenweg
         </summary>
         <div className="mt-1 font-mono">
-          = {n.einsetzen} = {n.vorhanden} N/mm²
+          = {n.einsetzen} = {fmt(n.vorhanden)} N/mm²
         </div>
       </details>
     </div>
@@ -74,7 +75,7 @@ function Kennwert({
         {label}
       </div>
       <div className={`text-sm font-semibold tabular-nums ${color}`}>
-        {Number.isFinite(value) ? value.toLocaleString('de-DE') : '∞'}
+        {fmt(value)}
         {unit && <span className="ml-0.5 text-[10px] font-normal text-slate-400">{unit}</span>}
       </div>
     </div>

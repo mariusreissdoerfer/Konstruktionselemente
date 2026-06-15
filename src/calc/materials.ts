@@ -13,4 +13,14 @@ export const MATERIALS: Material[] = [
   { id: '16MnCr5', kurz: '16MnCr5', name: 'Einsatzstahl', Re: 440, Rm: 640 },
 ]
 
-export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]))
+// Werkstoffe für Buchsen (Gleitlagerwerkstoffe). R_e/R_m als Richtwerte.
+export const BUCHSEN_MATERIALS: Material[] = [
+  { id: 'CuSn8', kurz: 'CuSn8', name: 'Zinnbronze (Buchse)', Re: 250, Rm: 390 },
+  { id: 'CuSn12', kurz: 'CuSn12', name: 'Gusszinnbronze (Buchse)', Re: 180, Rm: 280 },
+  { id: 'CuZn40', kurz: 'CuZn40Pb2', name: 'Messing (Buchse)', Re: 250, Rm: 360 },
+  { id: 'GGG40', kurz: 'EN-GJS-400', name: 'Sphäroguss (Buchse)', Re: 250, Rm: 400 },
+]
+
+export const ALL_MATERIALS: Material[] = [...MATERIALS, ...BUCHSEN_MATERIALS]
+
+export const MATERIAL_BY_ID = new Map(ALL_MATERIALS.map((m) => [m.id, m]))

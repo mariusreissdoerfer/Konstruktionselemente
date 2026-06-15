@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { fmt, parseDe } from '../calc/format'
+
 interface NumberInputProps {
   label: string
   value: number
@@ -20,6 +23,11 @@ export function NumberInput({
   step = 1,
   symbol,
 }: NumberInputProps) {
+  // Während der Eingabe (fokussiert) wird der Rohtext gehalten, ohne
+  // Tausenderpunkte. Außerhalb des Fokus wird formatiert angezeigt.
+  const [editing, setEditing] = useState<string | null>(null)
+  const display = editing !== null ? editing : fmt(value, 4)
+
   return (
     <label className="block">
       <span className="flex items-baseline justify-between text-sm font-medium text-slate-700">
@@ -44,13 +52,16 @@ export function NumberInput({
           />
         )}
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-          value={value}
-          min={min}
-          max={max}
-          step={step}
-          onChange={(e) => onChange(Number(e.target.value))}
+          value={display}
+          onFocus={() => setEditing(String(value))}
+          onBlur={() => setEditing(null)}
+          onChange={(e) => {
+            setEditing(e.target.value)
+            onChange(parseDe(e.target.value))
+          }}
         />
       </div>
     </label>
