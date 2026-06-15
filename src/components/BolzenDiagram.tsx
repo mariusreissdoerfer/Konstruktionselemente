@@ -7,6 +7,10 @@ export interface BolzenDiagramProps {
   d: number
   tS: number
   tG: number
+  /** Stangenbreite (Augenbreite) b_S in mm */
+  bS: number
+  /** Gabelbreite je Lasche b_G in mm */
+  bG: number
   spalt: number
   einbaufall: Einbaufall
   /** Buchsen-Außendurchmesser in der Stange (mm) oder null */
@@ -36,24 +40,24 @@ const COL = {
 }
 
 /** gemeinsamer Maßstab (px pro mm) für beide Ansichten */
-function useScale({ d, tS, tG, spalt, buchseStangeDa, buchseGabelDa }: BolzenDiagramProps) {
+function useScale({ d, tS, tG, bS, bG, spalt, buchseStangeDa, buchseGabelDa }: BolzenDiagramProps) {
   const dMax = Math.max(d, buchseStangeDa ?? 0, buchseGabelDa ?? 0, 6)
-  const De = dMax * 1.7 + 8 // schematischer Augen-Außendurchmesser
+  const bMax = Math.max(bS, bG, dMax + 4)
   const L = 2 * tG + 2 * spalt + tS || 1
-  const s = Math.min(300 / L, 130 / De, 72 / dMax, 4)
-  return { s, De, dMax }
+  const s = Math.min(300 / L, 150 / bMax, 80 / dMax, 4)
+  return { s }
 }
 
 export function BolzenDiagram(props: BolzenDiagramProps) {
-  const { s, De } = useScale(props)
+  const { s } = useScale(props)
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <figure className="lg:w-[34%]">
-        <Seitenansicht {...props} s={s} De={De} />
+        <Seitenansicht {...props} s={s} />
         <figcaption className="mt-1 text-center text-xs text-slate-400">Seitenansicht</figcaption>
       </figure>
       <figure className="lg:flex-1">
-        <Vorderansicht {...props} s={s} De={De} />
+        <Vorderansicht {...props} s={s} />
         <figcaption className="mt-1 text-center text-xs text-slate-400">
           Vorderansicht mit Biegemomentverlauf
         </figcaption>
@@ -62,22 +66,24 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   )
 }
 
-type ViewProps = BolzenDiagramProps & { s: number; De: number }
+type ViewProps = BolzenDiagramProps & { s: number }
 
 /* ----------------------------- Seitenansicht ----------------------------- */
 
-function Seitenansicht({ d, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s, De }: ViewProps) {
-  const W = 200
-  const rEye = (De * s) / 2
+function Seitenansicht({ d, bS, bG, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s }: ViewProps) {
+  const rGab = (bG * s) / 2 // Gabel-Auge (hinten)
+  const rEye = (bS * s) / 2 // Stangen-Auge (vorne)
+  const rOuter = Math.max(rGab, rEye)
   const rp = (d * s) / 2
   const da = buchseStangeDa ?? buchseGabelDa
   const rb = da ? (da * s) / 2 : 0
-  const stemW = rEye * 1.1
+  const stemW = Math.max(rEye, rGab) * 1.0
 
+  const W = Math.max(200, 2 * rOuter + 60)
   const cx = W / 2
   const top = 14
-  const cy = top + 70 + rEye
-  const H = cy + rEye + 86
+  const cy = top + 64 + rOuter
+  const H = cy + rOuter + 84
 
   const gabelFest = einbaufall === 2
   const stangeFest = einbaufall === 3
@@ -87,7 +93,7 @@ function Seitenansicht({ d, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s
       <Ground x={cx - 32} y={top} w={64} />
       {/* Gabel: Stiel + Auge (hinten) */}
       <rect x={cx - stemW / 2} y={top} width={stemW} height={cy - top} fill={gabelFest ? COL.fest : COL.gabel} stroke={COL.stroke} strokeWidth={1.5} />
-      <circle cx={cx} cy={cy} r={rEye + 7} fill={gabelFest ? COL.fest : COL.gabel} stroke={COL.stroke} strokeWidth={1.5} />
+      <circle cx={cx} cy={cy} r={rGab} fill={gabelFest ? COL.fest : COL.gabel} stroke={COL.stroke} strokeWidth={1.5} />
       {/* Stange: Auge (vorne) + Stiel nach unten */}
       <rect x={cx - stemW / 2} y={cy} width={stemW} height={H - 40 - cy} fill={stangeFest ? COL.fest : COL.stange} stroke={COL.stroke} strokeWidth={1.5} />
       <circle cx={cx} cy={cy} r={rEye} fill={stangeFest ? COL.fest : COL.stange} stroke={COL.stroke} strokeWidth={1.5} />
@@ -109,17 +115,19 @@ function Seitenansicht({ d, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s
         <polygon points={`${cx - 6},${H - 14} ${cx + 6},${H - 14} ${cx},${H - 2}`} />
         <text x={cx + 11} y={H - 18} fontSize="14" fontWeight="700">F</text>
       </g>
-      <text x={cx + rEye + 9} y={top + 26} fontSize="11" fill={COL.stroke}>Gabel</text>
-      <text x={cx + rEye + 9} y={H - 50} fontSize="11" fill={COL.stroke}>Stange</text>
+      <text x={cx + rOuter + 6} y={top + 26} fontSize="11" fill={COL.stroke}>Gabel</text>
+      <text x={cx + rOuter + 6} y={H - 50} fontSize="11" fill={COL.stroke}>Stange</text>
     </svg>
   )
 }
 
 /* ----------------------------- Vorderansicht ----------------------------- */
 
-function Vorderansicht({ F, d, tS, tG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s, De }: ViewProps) {
+function Vorderansicht({ F, d, tS, tG, bS, bG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s }: ViewProps) {
   const dp = d * s
-  const Dep = De * s
+  const bGp = bG * s // Augenhöhe Gabel-Lasche
+  const bSp = bS * s // Augenhöhe Stange
+  const hMax = Math.max(bGp, bSp)
   const gW = tG * s
   const gapW = spalt * s
   const sW = tS * s
@@ -131,14 +139,15 @@ function Vorderansicht({ F, d, tS, tG, spalt, einbaufall, buchseStangeDa, buchse
   const xGap2 = xStange + sW
   const xG2 = xGap2 + gapW
   const xEnd = xG2 + gW
-  const W = xEnd + 46
+  const W = xEnd + 78 // Platz rechts für b_G/b_S
 
   const groundY = 6
   const shankH = 26
-  const yokeH = Math.max(10, Dep * 0.26)
-  const earsTop = groundY + shankH + yokeH
-  const cy = earsTop + Dep / 2
-  const earsBottom = cy + Dep / 2
+  const yokeH = Math.max(10, bGp * 0.26)
+  const cy = groundY + shankH + yokeH + hMax / 2
+  const earsTopG = cy - bGp / 2
+  const earsTopS = cy - bSp / 2
+  const earsBottom = cy + hMax / 2
   const dimY = earsBottom + 22
   const rodBottom = dimY + 34
   const fEndY = rodBottom + 26
@@ -195,25 +204,25 @@ function Vorderansicht({ F, d, tS, tG, spalt, einbaufall, buchseStangeDa, buchse
       {/* Gabel: feste Einspannung + Stiel + Joch + zwei Laschen */}
       <Ground x={(xG1 + xEnd) / 2 - 30} y={groundY} w={60} />
       <rect x={(xG1 + xEnd) / 2 - gW / 2} y={groundY} width={gW} height={shankH} fill={earFill} stroke={earStroke} strokeWidth={1.5} />
-      <rect x={xG1} y={earsTop - yokeH} width={xEnd - xG1} height={yokeH} fill={earFill} stroke={earStroke} strokeWidth={1.5} />
+      <rect x={xG1} y={earsTopG - yokeH} width={xEnd - xG1} height={yokeH} fill={earFill} stroke={earStroke} strokeWidth={1.5} />
       {/* zwei Laschen */}
-      <Lasche x={xG1} w={gW} top={earsTop} h={Dep} fill={earFill} stroke={earStroke} />
-      <Lasche x={xG2} w={gW} top={earsTop} h={Dep} fill={earFill} stroke={earStroke} />
+      <Lasche x={xG1} w={gW} top={earsTopG} h={bGp} fill={earFill} stroke={earStroke} />
+      <Lasche x={xG2} w={gW} top={earsTopG} h={bGp} fill={earFill} stroke={earStroke} />
 
       {/* Stange: Auge + Stiel nach unten + Kraft */}
-      {!kugelB && <Lasche x={xStange} w={sW} top={earsTop} h={Dep} fill={rodFill} stroke={rodStroke} />}
+      {!kugelB && <Lasche x={xStange} w={sW} top={earsTopS} h={bSp} fill={rodFill} stroke={rodStroke} />}
       {kugelB &&
         (() => {
           const cxk = xStange + sW / 2
           // echte Kugel: Kreis, der in die Lagerbreite passt
-          const rOut = Math.max(6, Math.min(sW, Dep) / 2 - 2)
+          const rOut = Math.max(6, Math.min(sW, bSp) / 2 - 2)
           const rBall = Math.max(4, rOut - 4)
           return (
             <g>
               {/* Gehäuse / Augenstange (Höhe = Auge) */}
-              <rect x={xStange} y={earsTop} width={sW} height={Dep} rx={Math.min(sW / 2, 8)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
-              {/* spärische Kalotte oben/unten angedeutet */}
-              <circle cx={cxk} cy={cy} r={Dep / 2 - 4} fill="none" stroke={COL.ballDark} strokeWidth={1} strokeDasharray="2 3" opacity={0.5} />
+              <rect x={xStange} y={earsTopS} width={sW} height={bSp} rx={Math.min(sW / 2, 8)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+              {/* sphärische Kalotte angedeutet */}
+              <circle cx={cxk} cy={cy} r={bSp / 2 - 4} fill="none" stroke={COL.ballDark} strokeWidth={1} strokeDasharray="2 3" opacity={0.5} />
               {/* Außenring + Kugel + Glanzpunkt */}
               <circle cx={cxk} cy={cy} r={rOut} fill={COL.ball} stroke={COL.ballDark} strokeWidth={1.3} />
               <circle cx={cxk} cy={cy} r={rBall} fill="#eef2f7" stroke={COL.ballDark} strokeWidth={1.1} />
@@ -221,7 +230,7 @@ function Vorderansicht({ F, d, tS, tG, spalt, einbaufall, buchseStangeDa, buchse
             </g>
           )
         })()}
-      <rect x={xStange + sW / 2 - Math.max(sW * 0.32, 6)} y={earsBottom} width={Math.max(sW * 0.64, 12)} height={rodBottom - earsBottom} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+      <rect x={xStange + sW / 2 - Math.max(sW * 0.32, 6)} y={cy + bSp / 2} width={Math.max(sW * 0.64, 12)} height={rodBottom - (cy + bSp / 2)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
       <g stroke={COL.kraft} strokeWidth={2.5} fill={COL.kraft}>
         <line x1={xStange + sW / 2} y1={rodBottom} x2={xStange + sW / 2} y2={fEndY} />
         <polygon points={`${xStange + sW / 2 - 6},${fEndY - 8} ${xStange + sW / 2 + 6},${fEndY - 8} ${xStange + sW / 2},${fEndY + 2}`} />
@@ -254,6 +263,10 @@ function Vorderansicht({ F, d, tS, tG, spalt, einbaufall, buchseStangeDa, buchse
           ⌀d = {fmt(d)}
         </text>
       </g>
+
+      {/* Breiten b_G / b_S rechts */}
+      <VBemassung x={xEnd + 20} refX={xEnd} yTop={cy - bGp / 2} yBot={cy + bGp / 2} label={`b_G ${fmt(bG)}`} />
+      <VBemassung x={xEnd + 50} refX={xGap2} yTop={cy - bSp / 2} yBot={cy + bSp / 2} label={`b_S ${fmt(bS)}`} />
 
       {/* Biegemomentverlauf */}
       <g>
@@ -296,6 +309,24 @@ function Ground({ x, y, w }: { x: number; y: number; w: number }) {
     <g>
       <line x1={x} y1={y} x2={x + w} y2={y} stroke={COL.stroke} strokeWidth={1.5} />
       {ticks}
+    </g>
+  )
+}
+
+function VBemassung({ x, refX, yTop, yBot, label }: { x: number; refX: number; yTop: number; yBot: number; label: string }) {
+  const midY = (yTop + yBot) / 2
+  return (
+    <g stroke={COL.mass} strokeWidth={1} fill={COL.mass}>
+      {/* Hilfslinien */}
+      <line x1={refX} y1={yTop} x2={x} y2={yTop} strokeWidth={0.6} opacity={0.6} />
+      <line x1={refX} y1={yBot} x2={x} y2={yBot} strokeWidth={0.6} opacity={0.6} />
+      {/* Maßlinie */}
+      <line x1={x} y1={yTop} x2={x} y2={yBot} />
+      <Pfeilkopf x={x} y={yTop} dir={1} />
+      <Pfeilkopf x={x} y={yBot} dir={-1} />
+      <text x={x + 11} y={midY} fontSize="10.5" textAnchor="middle" stroke="none" transform={`rotate(-90 ${x + 11} ${midY})`}>
+        {label}
+      </text>
     </g>
   )
 }

@@ -4,6 +4,7 @@ import {
   biegemoment,
   bolzenflaeche,
   legeBolzenAus,
+  mindestMasse,
   widerstandsmoment,
   type BolzenInput,
 } from './bolzen'
@@ -17,6 +18,8 @@ const base: BolzenInput = {
   d: 20,
   tS: 20,
   tG: 12,
+  bS: 40,
+  bG: 40,
   spalt: 0,
   einbaufall: 1,
   lastfall: 'schwellend',
@@ -79,13 +82,13 @@ describe('Biegemoment mit Spalt a', () => {
 describe('berechneBolzen – Standardnachweise', () => {
   it('Flächenpressung Stange p_S = F/(d·t_S)', () => {
     const r = berechneBolzen(base)
-    const ps = r.nachweise.find((n) => n.name === 'Flächenpressung Stange')!
+    const ps = r.nachweise.find((n) => n.name === 'Lochleibung Stange')!
     expect(ps.vorhanden).toBeCloseTo(50, 2)
   })
 
   it('Flächenpressung Gabel p_G = F/(2·d·t_G)', () => {
     const r = berechneBolzen(base)
-    const pg = r.nachweise.find((n) => n.name === 'Flächenpressung Gabel')!
+    const pg = r.nachweise.find((n) => n.name === 'Lochleibung Gabel')!
     expect(pg.vorhanden).toBeCloseTo(41.67, 1)
   })
 
@@ -103,7 +106,7 @@ describe('berechneBolzen – Standardnachweise', () => {
 
   it('zulässige Werte schwellend: 0,25/0,20/0,15 · R_m', () => {
     const r = berechneBolzen(base)
-    const ps = r.nachweise.find((n) => n.name === 'Flächenpressung Stange')!
+    const ps = r.nachweise.find((n) => n.name === 'Lochleibung Stange')!
     const b = r.nachweise.find((n) => n.name === 'Biegung')!
     const tau = r.nachweise.find((n) => n.name.startsWith('Abscherung'))!
     expect(ps.zulaessig).toBeCloseTo(0.25 * S235.Rm, 2)
@@ -116,6 +119,42 @@ describe('berechneBolzen – Standardnachweise', () => {
     expect(r.bestanden).toBe(false)
     const b = r.nachweise.find((n) => n.name === 'Biegung')!
     expect(b.erfuellt).toBe(false)
+  })
+})
+
+describe('Zug im Nettoquerschnitt', () => {
+  it('Zug Stange σ_z = F/((b_S − d)·t_S)', () => {
+    const r = berechneBolzen(base)
+    const z = r.nachweise.find((n) => n.name === 'Zug Stange')!
+    // 20000 / ((40−20)·20) = 50
+    expect(z.vorhanden).toBeCloseTo(50, 2)
+    expect(z.zulaessig).toBeCloseTo(0.33 * S235.Rm, 2)
+  })
+  it('Zug Gabel σ_z = F/(2·(b_G − d)·t_G)', () => {
+    const r = berechneBolzen(base)
+    const z = r.nachweise.find((n) => n.name === 'Zug Gabel')!
+    // 20000 / (2·(40−20)·12) = 41,67
+    expect(z.vorhanden).toBeCloseTo(41.67, 1)
+  })
+  it('zu schmale Stange → Zug nicht erfüllt', () => {
+    const r = berechneBolzen({ ...base, bS: 20 })
+    const z = r.nachweise.find((n) => n.name === 'Zug Stange')!
+    expect(z.erfuellt).toBe(false)
+  })
+})
+
+describe('mindestMasse – Blechdicke & Breite', () => {
+  it('liefert positive Mindestmaße', () => {
+    const m = mindestMasse(base)
+    expect(m.tSmin).toBeGreaterThan(0)
+    expect(m.tGmin).toBeGreaterThan(0)
+    expect(m.bSmin).toBeGreaterThan(base.d)
+    expect(m.bGmin).toBeGreaterThan(base.d)
+  })
+  it('tSmin = F/(d·p_zul)', () => {
+    const m = mindestMasse(base)
+    // 20000 / (20 · 0,25·360) = 20000/1800 = 11,11
+    expect(m.tSmin).toBeCloseTo(11.11, 1)
   })
 })
 
@@ -134,7 +173,7 @@ describe('berechneBolzen – Buchse', () => {
     expect(aussen.vorhanden).toBeCloseTo(33.33, 1)
     expect(aussen.zulaessig).toBeCloseTo(0.25 * S235.Rm, 2)
     // keine einfache "Flächenpressung Stange" mehr
-    expect(r.nachweise.find((n) => n.name === 'Flächenpressung Stange')).toBeUndefined()
+    expect(r.nachweise.find((n) => n.name === 'Lochleibung Stange')).toBeUndefined()
   })
 })
 
@@ -148,7 +187,7 @@ describe('berechneBolzen – Kugelgelenk', () => {
     // F/(d·B) = 20000/(20·16) = 62,5
     expect(lager.vorhanden).toBeCloseTo(62.5, 2)
     expect(lager.zulaessig).toBeCloseTo(150, 2)
-    expect(r.nachweise.find((n) => n.name === 'Flächenpressung Stange')).toBeUndefined()
+    expect(r.nachweise.find((n) => n.name === 'Lochleibung Stange')).toBeUndefined()
   })
 })
 
@@ -158,6 +197,8 @@ describe('legeBolzenAus – Auslegung', () => {
       F: 20000,
       tS: 20,
       tG: 12,
+      bS: 40,
+      bG: 40,
       spalt: 0,
       einbaufall: 1,
       lastfall: 'schwellend',
@@ -169,11 +210,11 @@ describe('legeBolzenAus – Auslegung', () => {
 
   it('Spalt erhöht den erforderlichen Durchmesser', () => {
     const ohne = legeBolzenAus({
-      F: 20000, tS: 20, tG: 12, spalt: 0,
+      F: 20000, tS: 20, tG: 12, bS: 40, bG: 40, spalt: 0,
       einbaufall: 1, lastfall: 'schwellend', material: S235,
     })
     const mit = legeBolzenAus({
-      F: 20000, tS: 20, tG: 12, spalt: 10,
+      F: 20000, tS: 20, tG: 12, bS: 40, bG: 40, spalt: 10,
       einbaufall: 1, lastfall: 'schwellend', material: S235,
     })
     expect(mit.dErf).toBeGreaterThan(ohne.dErf)

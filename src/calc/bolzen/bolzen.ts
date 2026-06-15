@@ -23,18 +23,20 @@ import type { Einbaufall, Lastfall, Material, Nachweis } from '../types'
  *  p_zul = 0,25·R_m, σ_b,zul = 0,20·R_m, τ_a,zul = 0,15·R_m (Roloff/Matek).
  *  Die Werte für ruhend/wechselnd sind übliche Richtwerte und im UI editierbar. */
 export interface ZulFaktoren {
-  /** Faktor für zulässige Flächenpressung: p_zul = cP · R_m */
+  /** Faktor für zulässige Lochleibung/Flächenpressung: p_zul = cP · R_m */
   cP: number
   /** Faktor für zulässige Biegespannung: σ_b,zul = cSigma · R_m */
   cSigma: number
   /** Faktor für zulässige Schubspannung: τ_a,zul = cTau · R_m */
   cTau: number
+  /** Faktor für zulässige Zugspannung (Nettoquerschnitt): σ_z,zul = cZug · R_m */
+  cZug: number
 }
 
 export const ZUL_FAKTOREN: Record<Lastfall, ZulFaktoren> = {
-  ruhend: { cP: 0.35, cSigma: 0.3, cTau: 0.2 },
-  schwellend: { cP: 0.25, cSigma: 0.2, cTau: 0.15 },
-  wechselnd: { cP: 0.15, cSigma: 0.15, cTau: 0.1 },
+  ruhend: { cP: 0.35, cSigma: 0.3, cTau: 0.2, cZug: 0.45 },
+  schwellend: { cP: 0.25, cSigma: 0.2, cTau: 0.15, cZug: 0.33 },
+  wechselnd: { cP: 0.15, cSigma: 0.15, cTau: 0.1, cZug: 0.22 },
 }
 
 export const LASTFALL_LABEL: Record<Lastfall, string> = {
@@ -91,6 +93,10 @@ export interface BolzenInput {
   tS: number
   /** Gabeldicke je Lasche t_G in mm */
   tG: number
+  /** Stangenbreite (Augenbreite) b_S in mm */
+  bS: number
+  /** Gabelbreite je Lasche b_G in mm */
+  bG: number
   /** Spalt a zwischen Stange und je Gabellasche in mm */
   spalt: number
   einbaufall: Einbaufall
@@ -193,11 +199,11 @@ function nachweis(
 
 /** Vollständige Berechnung (Nachweis) der Bolzenverbindung. */
 export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
-  const { F, d, tS, tG, spalt, einbaufall, lastfall, material } = input
+  const { F, d, tS, tG, bS, bG, spalt, einbaufall, lastfall, material } = input
   const buchse = input.buchse ?? null
   const kugelgelenk = input.kugelgelenk ?? null
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[lastfall]
-  const { cP, cSigma, cTau } = faktoren
+  const { cP, cSigma, cTau, cZug } = faktoren
 
   const A = bolzenflaeche(d)
   const Wb = widerstandsmoment(d)
@@ -244,7 +250,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   } else {
     nachweise.push(
       nachweis(
-        'Flächenpressung Stange',
+        'Lochleibung Stange',
         'p_S = F / (d · t_S)',
         `${fmt(F)} / (${fmt(d)} · ${fmt(tS)})`,
         F / (d * tS),
@@ -276,7 +282,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   } else {
     nachweise.push(
       nachweis(
-        'Flächenpressung Gabel',
+        'Lochleibung Gabel',
         'p_G = F / (2 · d · t_G)',
         `${fmt(F)} / (2 · ${fmt(d)} · ${fmt(tG)})`,
         F / (2 * d * tG),
@@ -284,6 +290,33 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
       ),
     )
   }
+
+  // ---- Zug im Nettoquerschnitt (am Loch) ----
+  // wirksamer Lochdurchmesser: bei Buchse der Außendurchmesser
+  const dLochS = buchseStange && buchse ? buchse.da : d
+  const dLochG = buchseGabel && buchse ? buchse.da : d
+  const netS = Math.max(bS - dLochS, 0)
+  const netG = Math.max(bG - dLochG, 0)
+  const sigmaZZul = cZug * material.Rm
+
+  nachweise.push(
+    nachweis(
+      'Zug Stange',
+      'σ_z = F / ((b_S − d) · t_S)',
+      `${fmt(F)} / ((${fmt(bS)} − ${fmt(dLochS)}) · ${fmt(tS)})`,
+      netS > 0 ? F / (netS * tS) : Infinity,
+      sigmaZZul,
+    ),
+  )
+  nachweise.push(
+    nachweis(
+      'Zug Gabel',
+      'σ_z = F / (2 · (b_G − d) · t_G)',
+      `${fmt(F)} / (2 · (${fmt(bG)} − ${fmt(dLochG)}) · ${fmt(tG)})`,
+      netG > 0 ? F / (2 * netG * tG) : Infinity,
+      sigmaZZul,
+    ),
+  )
 
   // ---- Abscherung (zweischnittig) ----
   nachweise.push(
@@ -311,6 +344,43 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const bestanden = nachweise.every((n) => n.erfuellt)
 
   return { Mb, Wb, A, faktoren, nachweise, minSicherheit, bestanden }
+}
+
+export interface MindestMasse {
+  /** erforderliche Stangendicke aus Lochleibung in mm */
+  tSmin: number
+  /** erforderliche Gabeldicke (je Lasche) aus Lochleibung in mm */
+  tGmin: number
+  /** erforderliche Stangenbreite aus Zug (mit aktueller t_S) in mm */
+  bSmin: number
+  /** erforderliche Gabelbreite (je Lasche) aus Zug (mit aktueller t_G) in mm */
+  bGmin: number
+}
+
+/**
+ * Erforderliche Mindestmaße:
+ *  - Blechdicke aus Lochleibung:  t ≥ F / (d · p_zul)   (Gabel: 2·d)
+ *  - Blechbreite aus Zug:         b ≥ d_Loch + F / (t · σ_z,zul)  (Gabel: 2·t)
+ * Die Breiten werden mit den aktuell eingestellten Dicken berechnet.
+ */
+export function mindestMasse(input: BolzenInput): MindestMasse {
+  const { F, d, tS, tG, material } = input
+  const buchse = input.buchse ?? null
+  const faktoren = input.faktoren ?? ZUL_FAKTOREN[input.lastfall]
+  const pZul = faktoren.cP * material.Rm
+  const sigmaZ = faktoren.cZug * material.Rm
+
+  const ort = buchse?.ort ?? 'beide'
+  const dLochS = buchse && (ort === 'beide' || ort === 'stange') ? buchse.da : d
+  const dLochG = buchse && (ort === 'beide' || ort === 'gabel') ? buchse.da : d
+
+  const round = (x: number) => Math.round(x * 100) / 100
+  return {
+    tSmin: round(F / (d * pZul)),
+    tGmin: round(F / (2 * d * pZul)),
+    bSmin: round(dLochS + F / (tS * sigmaZ)),
+    bGmin: round(dLochG + F / (2 * tG * sigmaZ)),
+  }
 }
 
 // Genormte Bolzendurchmesser (Auswahl nach DIN, R10/R20), für die Auslegung.

@@ -13,6 +13,7 @@ import {
   LASTFALL_LABEL,
   berechneBolzen,
   legeBolzenAus,
+  mindestMasse,
   type BuchseConfig,
   type BuchseOrt,
   type KugelgelenkConfig,
@@ -52,12 +53,27 @@ function Toggle({
   )
 }
 
+function MindMass({ label, wert, ist }: { label: string; wert: number; ist: number }) {
+  const ok = ist >= wert
+  return (
+    <div className="rounded-lg bg-slate-50 px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={`text-sm font-semibold tabular-nums ${ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+        ≥ {fmt(wert)} mm
+      </div>
+      <div className="text-[10px] text-slate-400">aktuell {fmt(ist)}</div>
+    </div>
+  )
+}
+
 export function BolzenverbindungPage() {
   const [modus, setModus] = useState<Modus>('nachweis')
   const [F, setF] = useState(20000)
   const [d, setD] = useState(20)
   const [tS, setTS] = useState(20)
   const [tG, setTG] = useState(12)
+  const [bS, setBS] = useState(40)
+  const [bG, setBG] = useState(40)
   const [spalt, setSpalt] = useState(0)
   const [einbaufall, setEinbaufall] = useState<Einbaufall>(1)
   const [lastfall, setLastfall] = useState<Lastfall>('schwellend')
@@ -86,6 +102,8 @@ export function BolzenverbindungPage() {
     F,
     tS,
     tG,
+    bS,
+    bG,
     spalt,
     einbaufall,
     lastfall,
@@ -97,17 +115,18 @@ export function BolzenverbindungPage() {
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tS, tG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
+    [F, d, tS, tG, bS, bG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tS, tG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
+    [F, tS, tG, bS, bG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
   const anzeigeD = modus === 'nachweis' ? d : auslegung.dGewaehlt
+  const mindest = mindestMasse({ ...gemeinsam, d: anzeigeD })
 
   return (
     <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
@@ -140,6 +159,8 @@ export function BolzenverbindungPage() {
 
         <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={120} step={1} />
         <NumberInput label="Gabeldicke (je Lasche)" symbol="t_G" unit="mm" value={tG} onChange={setTG} min={2} max={120} step={1} />
+        <NumberInput label="Stangenbreite (Auge)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={300} step={1} />
+        <NumberInput label="Gabelbreite (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={300} step={1} />
         <NumberInput label="Spalt zw. Blechen" symbol="a" unit="mm" value={spalt} onChange={setSpalt} min={0} max={50} step={0.5} />
 
         <SelectInput<Einbaufall>
@@ -229,6 +250,8 @@ export function BolzenverbindungPage() {
             d={anzeigeD}
             tS={tS}
             tG={tG}
+            bS={bS}
+            bG={bG}
             spalt={spalt}
             einbaufall={einbaufall}
             buchseStangeDa={
@@ -259,6 +282,22 @@ export function BolzenverbindungPage() {
             </div>
           </div>
         )}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-2 text-sm font-semibold text-slate-800">
+            Erforderliche Mindestmaße (aus Lochleibung &amp; Zug)
+          </h3>
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <MindMass label="Stangendicke t_S" wert={mindest.tSmin} ist={tS} />
+            <MindMass label="Gabeldicke t_G" wert={mindest.tGmin} ist={tG} />
+            <MindMass label="Stangenbreite b_S" wert={mindest.bSmin} ist={bS} />
+            <MindMass label="Gabelbreite b_G" wert={mindest.bGmin} ist={bG} />
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Dicke aus Lochleibung (für ⌀{fmt(anzeigeD)} mm), Breite aus Zug (mit
+            aktueller Dicke). Werte ≥ Mindestmaß wählen.
+          </p>
+        </div>
 
         <div>
           <div className="mb-3 flex items-center justify-between">
