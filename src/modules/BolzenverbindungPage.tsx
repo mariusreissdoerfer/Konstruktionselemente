@@ -14,6 +14,7 @@ import {
   berechneBolzen,
   legeBolzenAus,
   type BuchseConfig,
+  type BuchseOrt,
   type KugelgelenkConfig,
 } from '../calc/bolzen/bolzen'
 import { fmt } from '../calc/format'
@@ -66,6 +67,7 @@ export function BolzenverbindungPage() {
   const [buchseOn, setBuchseOn] = useState(false)
   const [buchseDa, setBuchseDa] = useState(30)
   const [buchseMatId, setBuchseMatId] = useState('CuSn8')
+  const [buchseOrt, setBuchseOrt] = useState<BuchseOrt>('beide')
   const [kugelOn, setKugelOn] = useState(false)
   const [kugelB, setKugelB] = useState(20)
   const [kugelPzul, setKugelPzul] = useState(150)
@@ -74,7 +76,7 @@ export function BolzenverbindungPage() {
   const buchseMat = MATERIAL_BY_ID.get(buchseMatId) ?? BUCHSEN_MATERIALS[0]
 
   const buchse: BuchseConfig | null = buchseOn
-    ? { da: buchseDa, material: buchseMat }
+    ? { da: buchseDa, material: buchseMat, ort: buchseOrt }
     : null
   const kugelgelenk: KugelgelenkConfig | null = kugelOn
     ? { B: kugelB, pzul: kugelPzul }
@@ -183,6 +185,16 @@ export function BolzenverbindungPage() {
           {buchseOn && (
             <div className="space-y-3 border-l-2 border-amber-300 pl-3">
               <NumberInput label="Außendurchmesser" symbol="d_a" unit="mm" value={buchseDa} onChange={setBuchseDa} min={d + 1} max={150} step={1} />
+              <SelectInput<BuchseOrt>
+                label="Einbauort"
+                value={buchseOrt}
+                onChange={setBuchseOrt}
+                options={[
+                  { value: 'beide', label: 'Stange und Gabel' },
+                  { value: 'stange', label: 'nur Stange' },
+                  { value: 'gabel', label: 'nur Gabel' },
+                ]}
+              />
               <SelectInput<string>
                 label="Buchsenwerkstoff"
                 value={buchseMatId}
@@ -213,12 +225,20 @@ export function BolzenverbindungPage() {
       <section className="space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <BolzenDiagram
+            F={F}
             d={anzeigeD}
             tS={tS}
             tG={tG}
             spalt={spalt}
             einbaufall={einbaufall}
-            buchseDa={buchseOn ? buchseDa : null}
+            buchseStangeDa={
+              buchseOn && !kugelOn && (buchseOrt === 'beide' || buchseOrt === 'stange')
+                ? buchseDa
+                : null
+            }
+            buchseGabelDa={
+              buchseOn && (buchseOrt === 'beide' || buchseOrt === 'gabel') ? buchseDa : null
+            }
             kugelB={kugelOn ? kugelB : null}
           />
         </div>

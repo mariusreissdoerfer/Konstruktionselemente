@@ -61,12 +61,17 @@ export const EINBAUFALL_INFO: Record<
   },
 }
 
+/** Wo die Buchse(n) sitzen. */
+export type BuchseOrt = 'beide' | 'stange' | 'gabel'
+
 /** Optionale Buchse in den Bohrungen. */
 export interface BuchseConfig {
   /** Außendurchmesser der Buchse in mm */
   da: number
   /** Buchsenwerkstoff */
   material: Material
+  /** Einbauort der Buchse(n); Standard: beide */
+  ort?: BuchseOrt
 }
 
 /** Optionales Kugelgelenk / Gelenklager in der Stange. */
@@ -201,6 +206,10 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const pZulMat = (m: Material) => cP * m.Rm
   const nachweise: Nachweis[] = []
 
+  const ort = buchse?.ort ?? 'beide'
+  const buchseStange = buchse && (ort === 'beide' || ort === 'stange')
+  const buchseGabel = buchse && (ort === 'beide' || ort === 'gabel')
+
   // ---- Flächenpressung Stange (bzw. Kugelgelenk) ----
   if (kugelgelenk) {
     const p = F / (d * kugelgelenk.B)
@@ -213,7 +222,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
         kugelgelenk.pzul,
       ),
     )
-  } else if (buchse) {
+  } else if (buchseStange && buchse) {
     nachweise.push(
       nachweis(
         'Pressung Stange innen (Bolzen–Buchse)',
@@ -245,7 +254,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   }
 
   // ---- Flächenpressung Gabel ----
-  if (buchse) {
+  if (buchseGabel && buchse) {
     nachweise.push(
       nachweis(
         'Pressung Gabel innen (Bolzen–Buchse)',
