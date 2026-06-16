@@ -107,9 +107,10 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const wG = Math.max(bG, d) * s
   const wS = Math.max(bS, d) * s
   const wOuter = Math.max(wG, wS)
-  const sideMargin = 34
-  const sideW = wOuter + 2 * sideMargin
-  const sideCx = sideMargin + wOuter / 2
+  const sideLeft = 30
+  const sideCRight = 96 // Platz rechts für die c-Maße
+  const sideW = sideLeft + wOuter + sideCRight
+  const sideCx = sideLeft + wOuter / 2
   const rp = dp / 2
 
   // ---------------- Vorderansicht (rechts) ----------------
@@ -149,7 +150,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const bSdimY = cy + hHalf + 18
 
   const H = Math.max(legendY + 8, sideFEnd + 14)
-  const W = xEnd + 84
+  const W = xEnd + 40
 
   // Buchse-Band (Front): Breite = tragende Länge ≤ Blechdicke, zentriert
   const bushingF = (xMitte: number, t: number, da: number | null, len: number | null, key: string) => {
@@ -196,6 +197,15 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         {/* Steg-Breiten b */}
         <HDim x1={sideCx - wG / 2} x2={sideCx + wG / 2} y={cy - hHalf - 14} wy={cy - ehG / 2} below={false} label={`b_G ${fmt(bG)}`} onClick={dimClick && dimClick('bG', bG)} />
         <HDim x1={sideCx - wS / 2} x2={sideCx + wS / 2} y={bSdimY} wy={cy + ehS / 2} label={`b_S ${fmt(bS)}`} onClick={dimClick && dimClick('bS', bS)} />
+        {/* Randabstände c (in Kraftrichtung) – kleineres Maß innen */}
+        {[
+          { key: 'cS' as DimKey, val: cS, label: `c_S ${fmt(cS)}` },
+          { key: 'cG' as DimKey, val: cG, label: `c_G ${fmt(cG)}` },
+        ]
+          .sort((a, b) => a.val - b.val)
+          .map((cd, i) => (
+            <VDim key={cd.key} x={sideCx + wOuter / 2 + 18 + i * 30} yTop={cy - cd.val * s} yBot={cy} wx={sideCx + wOuter / 2} side="right" label={cd.label} onClick={dimClick && dimClick(cd.key, cd.val)} />
+          ))}
       </g>
 
       {/* ===================== Vorderansicht ===================== */}
@@ -260,15 +270,6 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
             />
           ))}
 
-        {/* Randabstände c rechts: kleineres Maß innen (näher am Bauteil) */}
-        {[
-          { key: 'cS' as DimKey, val: cS, top: earsTopS, label: `c_S ${fmt(cS)}` },
-          { key: 'cG' as DimKey, val: cG, top: earsTopG, label: `c_G ${fmt(cG)}` },
-        ]
-          .sort((a, b) => a.val - b.val)
-          .map((cd, i) => (
-            <VDim key={cd.key} x={xEnd + 24 + i * 30} yTop={cd.top} yBot={cy} wx={xGap2} side="right" label={cd.label} onClick={dimClick && dimClick(cd.key, cd.val)} />
-          ))}
       </g>
 
       {/* Legende */}
