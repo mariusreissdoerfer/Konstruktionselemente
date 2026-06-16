@@ -37,7 +37,22 @@ export interface BolzenDiagramProps {
   buchseLenGabel: number | null
   /** wenn gesetzt: Maße sind per Klick änderbar */
   onEditDim?: (key: DimKey, value: number) => void
+  /** welche Nachweise versagen → rote Versagensmarkierungen */
+  versagen?: Versagen
 }
+
+export interface Versagen {
+  lochStange?: boolean
+  lochGabel?: boolean
+  zugStange?: boolean
+  zugGabel?: boolean
+  ausreissStange?: boolean
+  ausreissGabel?: boolean
+  abscherung?: boolean
+  biegung?: boolean
+}
+
+const ROT = '#dc2626'
 
 const COL = {
   gabel: '#94a3b8',
@@ -65,6 +80,7 @@ function useScale({ d, tS, tG, bS, bG, cS, cG, spalt, buchseStangeDa, buchseGabe
 
 export function BolzenDiagram(props: BolzenDiagramProps) {
   const { d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
+  const v = props.versagen ?? {}
   const { s } = useScale(props)
 
   // Inline-Editor für Maße (per Klick)
@@ -268,12 +284,71 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
 
       </g>
 
+      {/* ===================== Versagensmarkierungen (rot) ===================== */}
+      {/* Lochleibung: Quetschung an der Bolzen-Bauteil-Kontaktfläche */}
+      {v.lochStange && (
+        <g stroke={ROT} strokeWidth={3} strokeLinecap="round">
+          <line x1={xStange} y1={boltTop} x2={xGap2} y2={boltTop} />
+          <line x1={xStange} y1={boltBottom} x2={xGap2} y2={boltBottom} />
+        </g>
+      )}
+      {v.lochGabel && (
+        <g stroke={ROT} strokeWidth={3} strokeLinecap="round">
+          <line x1={xG1} y1={boltTop} x2={xGap1} y2={boltTop} />
+          <line x1={xG1} y1={boltBottom} x2={xGap1} y2={boltBottom} />
+          <line x1={xG2} y1={boltTop} x2={xEnd} y2={boltTop} />
+          <line x1={xG2} y1={boltBottom} x2={xEnd} y2={boltBottom} />
+        </g>
+      )}
+      {/* Abscherung: Bolzen schert an den Trennfugen (Stangenflächen) */}
+      {v.abscherung && (
+        <>
+          <Riss x1={xStange} y1={boltTop - 3} x2={xStange} y2={boltBottom + 3} />
+          <Riss x1={xGap2} y1={boltTop - 3} x2={xGap2} y2={boltBottom + 3} />
+        </>
+      )}
+      {/* Biegung: Bolzen bricht in der Mitte */}
+      {v.biegung && <Riss x1={xStange + sW / 2} y1={boltTop - 4} x2={xStange + sW / 2} y2={boltBottom + 4} />}
+
+      {/* Zug: Riss quer durch die Stege (Seitenansicht) */}
+      {v.zugStange && (
+        <>
+          <Riss x1={sideCx - rp} y1={cy} x2={sideCx - wS / 2} y2={cy} />
+          <Riss x1={sideCx + rp} y1={cy} x2={sideCx + wS / 2} y2={cy} />
+        </>
+      )}
+      {v.zugGabel && (
+        <>
+          <Riss x1={sideCx - rp} y1={cy} x2={sideCx - wG / 2} y2={cy} />
+          <Riss x1={sideCx + rp} y1={cy} x2={sideCx + wG / 2} y2={cy} />
+        </>
+      )}
+      {/* Ausreißen: Riss vom Loch zur Stirnkante (Stange nach oben, Gabel nach unten) */}
+      {v.ausreissStange && (
+        <>
+          <Riss x1={sideCx - rp} y1={cy} x2={sideCx - rp} y2={cy - cS * s} />
+          <Riss x1={sideCx + rp} y1={cy} x2={sideCx + rp} y2={cy - cS * s} />
+        </>
+      )}
+      {v.ausreissGabel && (
+        <>
+          <Riss x1={sideCx - rp} y1={cy} x2={sideCx - rp} y2={cy + cG * s} />
+          <Riss x1={sideCx + rp} y1={cy} x2={sideCx + rp} y2={cy + cG * s} />
+        </>
+      )}
+
       {/* Legende */}
       <g fontSize="10.5" fill={COL.stroke}>
         <Legende x={xG1} y={legendY} color={COL.bolzen} label="Bolzen" />
         <Legende x={xG1 + 66} y={legendY} color={COL.gabel} label="Gabel" />
         <Legende x={xG1 + 128} y={legendY} color={COL.stange} label="Stange" />
         {(buchseGabelDa || buchseStangeDa) && <Legende x={xG1 + 196} y={legendY} color={COL.buchse} label="Buchse" />}
+        {Object.values(v).some(Boolean) && (
+          <g>
+            <Riss x1={xG1 + 262} y1={legendY - 3} x2={xG1 + 274} y2={legendY - 3} />
+            <text x={xG1 + 279} y={legendY} stroke="none" fill={ROT}>Versagen</text>
+          </g>
+        )}
       </g>
     </svg>
       {edit && (
@@ -318,6 +393,23 @@ function Ground({ x, y, w }: { x: number; y: number; w: number }) {
       {ticks}
     </g>
   )
+}
+
+/** roter Riss als gezackte Linie zwischen zwei Punkten. */
+function Riss({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: number; y2: number }) {
+  const segs = 6
+  const dx = (x2 - x1) / segs
+  const dy = (y2 - y1) / segs
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1
+  const nx = -(y2 - y1) / len
+  const ny = (x2 - x1) / len
+  const amp = 3
+  const pts: string[] = []
+  for (let i = 0; i <= segs; i++) {
+    const off = i === 0 || i === segs ? 0 : (i % 2 ? amp : -amp)
+    pts.push(`${(x1 + dx * i + nx * off).toFixed(1)},${(y1 + dy * i + ny * off).toFixed(1)}`)
+  }
+  return <polyline points={pts.join(' ')} fill="none" stroke={ROT} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
 }
 
 function Legende({ x, y, color, label }: { x: number; y: number; color: string; label: string }) {

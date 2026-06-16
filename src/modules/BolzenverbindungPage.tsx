@@ -176,6 +176,20 @@ export function BolzenverbindungPage() {
   const anzeigeCG = aus ? auslegung.cG : cG
   const mindest = mindestMasse({ ...gemeinsam, d: anzeigeD })
 
+  // Versagensmarkierungen aus den Nachweisen ableiten
+  const fail = (pred: (n: string) => boolean) =>
+    ergebnis.nachweise.some((n) => pred(n.name) && !n.erfuellt)
+  const versagen = {
+    lochStange: fail((n) => n.includes('Lochleibung Stange') || n.includes('Stange innen') || n.includes('Stange außen')),
+    lochGabel: fail((n) => n.includes('Lochleibung Gabel') || n.includes('Gabel innen') || n.includes('Gabel außen')),
+    zugStange: fail((n) => n === 'Zug Stange'),
+    zugGabel: fail((n) => n === 'Zug Gabel'),
+    ausreissStange: fail((n) => n.startsWith('Stange –')),
+    ausreissGabel: fail((n) => n.startsWith('Gabel –')),
+    abscherung: fail((n) => n.startsWith('Abscherung')),
+    biegung: fail((n) => n === 'Biegung'),
+  }
+
   // Maße per Klick in der Zeichnung ändern (nur im Nachweis-Modus)
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
   const handleEditDim = (key: DimKey, value: number) => {
@@ -368,6 +382,7 @@ export function BolzenverbindungPage() {
             buchseLenStange={buchseOn && buchseOrt !== 'gabel' ? lenS : null}
             buchseLenGabel={buchseOn && buchseOrt !== 'stange' ? lenG : null}
             onEditDim={aus ? undefined : handleEditDim}
+            versagen={versagen}
           />
         </div>
       </div>
