@@ -17,3 +17,12 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* klickbare Maße in der Visualisierung */
+.dim-edit {
+  cursor: pointer;
+}
+.dim-edit:hover {
+  fill: #0284c7;
+  font-weight: 700;
+}

@@ -1,5 +1,9 @@
+import { useRef, useState } from 'react'
 import { fmt } from '../calc/format'
 import type { Einbaufall } from '../calc/types'
+
+/** Bemaßbare Größen (per Klick in der Zeichnung editierbar). */
+export type DimKey = 'd' | 'tS' | 'tG' | 'bS' | 'bG' | 'cS' | 'cG' | 'spalt'
 
 export interface BolzenDiagramProps {
   d: number
@@ -19,6 +23,8 @@ export interface BolzenDiagramProps {
   buchseGabelDa: number | null
   buchseLenStange: number | null
   buchseLenGabel: number | null
+  /** wenn gesetzt: Maße sind per Klick änderbar */
+  onEditDim?: (key: DimKey, value: number) => void
 }
 
 const COL = {
@@ -46,8 +52,32 @@ function useScale({ d, tS, tG, bS, bG, cS, cG, spalt, buchseStangeDa, buchseGabe
 }
 
 export function BolzenDiagram(props: BolzenDiagramProps) {
-  const { d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel } = props
+  const { d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
   const { s } = useScale(props)
+
+  // Inline-Editor für Maße (per Klick)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [edit, setEdit] = useState<{ key: DimKey; value: number; left: number; top: number } | null>(null)
+
+  const dimClick =
+    onEditDim &&
+    ((key: DimKey, value: number) => (e: React.MouseEvent) => {
+      const wrap = wrapRef.current?.getBoundingClientRect()
+      const r = (e.currentTarget as Element).getBoundingClientRect()
+      setEdit({
+        key,
+        value,
+        left: r.left - (wrap?.left ?? 0),
+        top: r.top - (wrap?.top ?? 0) + r.height + 2,
+      })
+    })
+
+  const commit = (raw: string) => {
+    if (!edit || !onEditDim) return setEdit(null)
+    const n = Number(raw.replace(',', '.'))
+    if (Number.isFinite(n)) onEditDim(edit.key, n)
+    setEdit(null)
+  }
 
   const dp = d * s
   const ehG = Math.max(2 * cG, d) * s // Augenhöhe Gabel
@@ -118,6 +148,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const rb = sideDa ? (sideDa * s) / 2 : 0
 
   return (
+    <div ref={wrapRef} className="relative">
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Bolzenverbindung – Seiten- und Vorderansicht">
       <defs>
         <pattern id="hatchF" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
@@ -150,9 +181,9 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
           <text x={sideCx + 11} y={sideFEnd - 6} fontSize="14" fontWeight="700">F</text>
         </g>
         {/* Steg-Breiten b */}
-        <HBemassung y={cy - hHalf - 14} x1={sideCx - wG / 2} x2={sideCx + wG / 2} refY={cy - ehG / 2} label={`b_G ${fmt(bG)}`} up />
-        <HBemassung y={bSdimY} x1={sideCx - wS / 2} x2={sideCx + wS / 2} refY={cy + ehS / 2} label={`b_S ${fmt(bS)}`} />
-        <text x={sideCx + rp + 5} y={cy - rp - 2} fontSize="10" fill={COL.bolzenStroke}>⌀d {fmt(d)}</text>
+        <HBemassung y={cy - hHalf - 14} x1={sideCx - wG / 2} x2={sideCx + wG / 2} refY={cy - ehG / 2} label={`b_G ${fmt(bG)}`} up onClick={dimClick && dimClick('bG', bG)} />
+        <HBemassung y={bSdimY} x1={sideCx - wS / 2} x2={sideCx + wS / 2} refY={cy + ehS / 2} label={`b_S ${fmt(bS)}`} onClick={dimClick && dimClick('bS', bS)} />
+        <text x={sideCx + rp + 5} y={cy - rp - 2} fontSize="10" fill={COL.bolzenStroke} className={dimClick ? 'dim-edit' : undefined} onClick={dimClick ? dimClick('d', d) : undefined}>⌀d {fmt(d)}</text>
       </g>
 
       {/* ===================== Vorderansicht ===================== */}
@@ -181,23 +212,23 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         <line x1={xEnd + 18} y1={boltTop - 4} x2={xEnd + 18} y2={boltBottom + 4} stroke={COL.bolzenStroke} strokeWidth={2} />
 
         {/* Dickenmaße */}
-        <Bemassung x1={xG1} x2={xGap1} y={dimY} label={`t_G ${fmt(tG)}`} />
-        {spalt > 0 && <Bemassung x1={xGap1} x2={xStange} y={dimY} label={`a ${fmt(spalt)}`} />}
-        <Bemassung x1={xStange} x2={xGap2} y={dimY} label={`t_S ${fmt(tS)}`} />
-        {spalt > 0 && <Bemassung x1={xGap2} x2={xG2} y={dimY} label={`a ${fmt(spalt)}`} />}
-        <Bemassung x1={xG2} x2={xEnd} y={dimY} label={`t_G ${fmt(tG)}`} />
+        <Bemassung x1={xG1} x2={xGap1} y={dimY} label={`t_G ${fmt(tG)}`} onClick={dimClick && dimClick('tG', tG)} />
+        {spalt > 0 && <Bemassung x1={xGap1} x2={xStange} y={dimY} label={`a ${fmt(spalt)}`} onClick={dimClick && dimClick('spalt', spalt)} />}
+        <Bemassung x1={xStange} x2={xGap2} y={dimY} label={`t_S ${fmt(tS)}`} onClick={dimClick && dimClick('tS', tS)} />
+        {spalt > 0 && <Bemassung x1={xGap2} x2={xG2} y={dimY} label={`a ${fmt(spalt)}`} onClick={dimClick && dimClick('spalt', spalt)} />}
+        <Bemassung x1={xG2} x2={xEnd} y={dimY} label={`t_G ${fmt(tG)}`} onClick={dimClick && dimClick('tG', tG)} />
 
         {/* ⌀d links */}
         <g stroke={COL.mass} strokeWidth={1} fill={COL.mass}>
           <line x1={xLeftDim - 48} y1={boltTop} x2={xLeftDim - 48} y2={boltBottom} />
           <Pfeilkopf x={xLeftDim - 48} y={boltTop} dir={1} />
           <Pfeilkopf x={xLeftDim - 48} y={boltBottom} dir={-1} />
-          <text x={xLeftDim - 60} y={cy} fontSize="11" textAnchor="middle" stroke="none" transform={`rotate(-90 ${xLeftDim - 60} ${cy})`}>⌀d = {fmt(d)}</text>
+          <text x={xLeftDim - 60} y={cy} fontSize="11" textAnchor="middle" stroke="none" transform={`rotate(-90 ${xLeftDim - 60} ${cy})`} className={dimClick ? 'dim-edit' : undefined} onClick={dimClick ? dimClick('d', d) : undefined}>⌀d = {fmt(d)}</text>
         </g>
 
         {/* Randabstände c rechts */}
-        <CDim x={xEnd + 22} refX={xG2 + gW} yMitte={cy} yKante={earsTopG} label={`c_G ${fmt(cG)}`} />
-        <CDim x={xEnd + 52} refX={xGap2} yMitte={cy} yKante={earsTopS} label={`c_S ${fmt(cS)}`} />
+        <CDim x={xEnd + 22} refX={xG2 + gW} yMitte={cy} yKante={earsTopG} label={`c_G ${fmt(cG)}`} onClick={dimClick && dimClick('cG', cG)} />
+        <CDim x={xEnd + 52} refX={xGap2} yMitte={cy} yKante={earsTopS} label={`c_S ${fmt(cS)}`} onClick={dimClick && dimClick('cS', cS)} />
       </g>
 
       {/* Legende */}
@@ -208,6 +239,23 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         {(buchseGabelDa || buchseStangeDa) && <Legende x={xG1 + 196} y={legendY} color={COL.buchse} label="Buchse" />}
       </g>
     </svg>
+      {edit && (
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          defaultValue={edit.value}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit(e.currentTarget.value)
+            if (e.key === 'Escape') setEdit(null)
+          }}
+          onBlur={(e) => commit(e.currentTarget.value)}
+          className="absolute z-10 w-20 rounded-md border border-sky-400 bg-white px-1.5 py-0.5 text-right text-sm tabular-nums shadow-lg outline-none ring-2 ring-sky-200"
+          style={{ left: Math.max(0, edit.left - 30), top: edit.top }}
+        />
+      )}
+    </div>
   )
 }
 
@@ -248,33 +296,33 @@ function Legende({ x, y, color, label }: { x: number; y: number; color: string; 
   )
 }
 
-function Bemassung({ x1, x2, y, label }: { x1: number; x2: number; y: number; label: string }) {
+function Bemassung({ x1, x2, y, label, onClick }: { x1: number; x2: number; y: number; label: string; onClick?: (e: React.MouseEvent) => void }) {
   const mid = (x1 + x2) / 2
   return (
     <g stroke={COL.mass} strokeWidth={1} fill={COL.mass}>
       <line x1={x1} y1={y - 4} x2={x1} y2={y + 4} />
       <line x1={x2} y1={y - 4} x2={x2} y2={y + 4} />
       <line x1={x1} y1={y} x2={x2} y2={y} />
-      <text x={mid} y={y + 14} fontSize="10.5" textAnchor="middle" stroke="none">{label}</text>
+      <text x={mid} y={y + 14} fontSize="10.5" textAnchor="middle" stroke="none" className={onClick ? 'dim-edit' : undefined} onClick={onClick}>{label}</text>
     </g>
   )
 }
 
 /** waagerechtes Maß (Breite) mit Hilfslinien zur Kante. */
-function HBemassung({ x1, x2, y, refY, label, up }: { x1: number; x2: number; y: number; refY: number; label: string; up?: boolean }) {
+function HBemassung({ x1, x2, y, refY, label, up, onClick }: { x1: number; x2: number; y: number; refY: number; label: string; up?: boolean; onClick?: (e: React.MouseEvent) => void }) {
   const mid = (x1 + x2) / 2
   return (
     <g stroke={COL.mass} strokeWidth={1} fill={COL.mass}>
       <line x1={x1} y1={refY} x2={x1} y2={y} strokeWidth={0.6} opacity={0.6} />
       <line x1={x2} y1={refY} x2={x2} y2={y} strokeWidth={0.6} opacity={0.6} />
       <line x1={x1} y1={y} x2={x2} y2={y} />
-      <text x={mid} y={up ? y - 5 : y + 13} fontSize="10.5" textAnchor="middle" stroke="none">{label}</text>
+      <text x={mid} y={up ? y - 5 : y + 13} fontSize="10.5" textAnchor="middle" stroke="none" className={onClick ? 'dim-edit' : undefined} onClick={onClick}>{label}</text>
     </g>
   )
 }
 
 /** senkrechtes Randabstands-Maß von Lochmitte zur Stirnkante. */
-function CDim({ x, refX, yMitte, yKante, label }: { x: number; refX: number; yMitte: number; yKante: number; label: string }) {
+function CDim({ x, refX, yMitte, yKante, label, onClick }: { x: number; refX: number; yMitte: number; yKante: number; label: string; onClick?: (e: React.MouseEvent) => void }) {
   const mid = (yMitte + yKante) / 2
   return (
     <g stroke={COL.mass} strokeWidth={1} fill={COL.mass}>
@@ -283,7 +331,7 @@ function CDim({ x, refX, yMitte, yKante, label }: { x: number; refX: number; yMi
       <line x1={x} y1={yMitte} x2={x} y2={yKante} />
       <Pfeilkopf x={x} y={yKante} dir={1} />
       <Pfeilkopf x={x} y={yMitte} dir={-1} />
-      <text x={x + 11} y={mid} fontSize="10" textAnchor="middle" stroke="none" transform={`rotate(-90 ${x + 11} ${mid})`}>{label}</text>
+      <text x={x + 11} y={mid} fontSize="10" textAnchor="middle" stroke="none" transform={`rotate(-90 ${x + 11} ${mid})`} className={onClick ? 'dim-edit' : undefined} onClick={onClick}>{label}</text>
     </g>
   )
 }

@@ -3,7 +3,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { NumberInput } from '../components/NumberInput'
 import { SelectInput } from '../components/SelectInput'
 import { ResultCard } from '../components/ResultCard'
-import { BolzenDiagram } from '../components/BolzenDiagram'
+import { BolzenDiagram, type DimKey } from '../components/BolzenDiagram'
 import {
   BUCHSEN_MATERIALS,
   MATERIALS,
@@ -175,6 +175,21 @@ export function BolzenverbindungPage() {
   const anzeigeCS = aus ? auslegung.cS : cS
   const anzeigeCG = aus ? auslegung.cG : cG
   const mindest = mindestMasse({ ...gemeinsam, d: anzeigeD })
+
+  // Maße per Klick in der Zeichnung ändern (nur im Nachweis-Modus)
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+  const handleEditDim = (key: DimKey, value: number) => {
+    switch (key) {
+      case 'd': setD(clamp(Math.round(value), 3, 800)); break
+      case 'tS': setTS(clamp(value, 2, 600)); break
+      case 'tG': setTG(clamp(value, 2, 600)); break
+      case 'bS': setBS(clamp(value, bMin, 1500)); break
+      case 'bG': setBG(clamp(value, bMin, 1500)); break
+      case 'cS': setCS(clamp(value, cMin, 1000)); break
+      case 'cG': setCG(clamp(value, cMin, 1000)); break
+      case 'spalt': setSpalt(clamp(value, 0, 200)); break
+    }
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:items-start">
@@ -348,6 +363,7 @@ export function BolzenverbindungPage() {
             buchseGabelDa={buchseOn && buchseOrt !== 'stange' ? buchseDaG : null}
             buchseLenStange={buchseOn && buchseOrt !== 'gabel' ? lenS : null}
             buchseLenGabel={buchseOn && buchseOrt !== 'stange' ? lenG : null}
+            onEditDim={aus ? undefined : handleEditDim}
           />
         </div>
       </div>
