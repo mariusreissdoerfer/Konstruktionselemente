@@ -20,6 +20,8 @@ const base: BolzenInput = {
   tG: 12,
   bS: 40,
   bG: 40,
+  cS: 25,
+  cG: 25,
   spalt: 0,
   einbaufall: 1,
   lastfall: 'schwellend',
@@ -140,6 +142,27 @@ describe('Zug im Nettoquerschnitt', () => {
     const r = berechneBolzen({ ...base, bS: 20 })
     const z = r.nachweise.find((n) => n.name === 'Zug Stange')!
     expect(z.erfuellt).toBe(false)
+  })
+})
+
+describe('Ausreißen am Kopf (Randabstand c)', () => {
+  it('Ausreißen Stange τ = F/(2·(c_S − d/2)·t_S)', () => {
+    const r = berechneBolzen(base)
+    const a = r.nachweise.find((n) => n.name === 'Ausreißen Stange')!
+    // 20000 / (2·(25−10)·20) = 20000/600 = 33,33
+    expect(a.vorhanden).toBeCloseTo(33.33, 1)
+    expect(a.zulaessig).toBeCloseTo(0.15 * S235.Rm, 2)
+  })
+  it('Ausreißen Gabel τ = F/(4·(c_G − d/2)·t_G)', () => {
+    const r = berechneBolzen(base)
+    const a = r.nachweise.find((n) => n.name === 'Ausreißen Gabel')!
+    // 20000 / (4·(25−10)·12) = 20000/720 = 27,78
+    expect(a.vorhanden).toBeCloseTo(27.78, 1)
+  })
+  it('zu kleiner Randabstand → Ausreißen nicht erfüllt', () => {
+    const r = berechneBolzen({ ...base, cS: 11 })
+    const a = r.nachweise.find((n) => n.name === 'Ausreißen Stange')!
+    expect(a.erfuellt).toBe(false)
   })
 })
 

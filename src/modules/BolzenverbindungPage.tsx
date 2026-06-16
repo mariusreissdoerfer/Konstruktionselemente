@@ -88,6 +88,8 @@ export function BolzenverbindungPage() {
   const [tG, setTG] = useLocalStorage('ke.bolzen.tG', 12)
   const [bS, setBS] = useLocalStorage('ke.bolzen.bS', 40)
   const [bG, setBG] = useLocalStorage('ke.bolzen.bG', 40)
+  const [cS, setCS] = useLocalStorage('ke.bolzen.cS', 25)
+  const [cG, setCG] = useLocalStorage('ke.bolzen.cG', 25)
   const [spalt, setSpalt] = useLocalStorage('ke.bolzen.spalt', 0)
   const [einbaufall, setEinbaufall] = useLocalStorage<Einbaufall>('ke.bolzen.einbaufall', 1)
   const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
@@ -105,9 +107,12 @@ export function BolzenverbindungPage() {
   // Das Auge muss den Bolzen umschließen: b ≥ d (+ Mindeststeg). Wächst d,
   // wandert die Augenkante mit nach außen (Lage), b kann nicht unter d fallen.
   const bMin = d + 2
+  const cMin = Math.ceil(d / 2) + 1
   useEffect(() => {
     if (bS < bMin) setBS(bMin)
     if (bG < bMin) setBG(bMin)
+    if (cS < cMin) setCS(cMin)
+    if (cG < cMin) setCG(cMin)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d])
 
@@ -127,6 +132,8 @@ export function BolzenverbindungPage() {
     tG,
     bS,
     bG,
+    cS,
+    cG,
     spalt,
     einbaufall,
     lastfall,
@@ -138,13 +145,13 @@ export function BolzenverbindungPage() {
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tS, tG, bS, bG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
+    [F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tS, tG, bS, bG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
+    [F, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse, kugelgelenk],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
@@ -154,6 +161,8 @@ export function BolzenverbindungPage() {
   const anzeigeTG = aus ? auslegung.tG : tG
   const anzeigeBS = aus ? auslegung.bS : bS
   const anzeigeBG = aus ? auslegung.bG : bG
+  const anzeigeCS = aus ? auslegung.cS : cS
+  const anzeigeCG = aus ? auslegung.cG : cG
   const mindest = mindestMasse({ ...gemeinsam, d: anzeigeD })
 
   return (
@@ -189,8 +198,10 @@ export function BolzenverbindungPage() {
           <>
             <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={600} step={1} />
             <NumberInput label="Gabeldicke (je Lasche)" symbol="t_G" unit="mm" value={tG} onChange={setTG} min={2} max={600} step={1} />
-            <NumberInput label="Stangenbreite (Auge)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={1500} step={1} />
-            <NumberInput label="Gabelbreite (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={1500} step={1} />
+            <NumberInput label="Stangenbreite Steg (⊥ Kraft)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={1500} step={1} />
+            <NumberInput label="Gabelbreite Steg (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={1500} step={1} />
+            <NumberInput label="Randabstand Stange (∥ Kraft)" symbol="c_S" unit="mm" value={cS} onChange={setCS} min={cMin} max={1000} step={1} />
+            <NumberInput label="Randabstand Gabel (je Lasche)" symbol="c_G" unit="mm" value={cG} onChange={setCG} min={cMin} max={1000} step={1} />
           </>
         )}
         <NumberInput label="Spalt zw. Blechen" symbol="a" unit="mm" value={spalt} onChange={setSpalt} min={0} max={200} step={1} />
@@ -297,6 +308,8 @@ export function BolzenverbindungPage() {
             tG={anzeigeTG}
             bS={anzeigeBS}
             bG={anzeigeBG}
+            cS={anzeigeCS}
+            cG={anzeigeCG}
             spalt={spalt}
             einbaufall={einbaufall}
             buchseStangeDa={
@@ -321,12 +334,14 @@ export function BolzenverbindungPage() {
                 d maßgebend: {auslegung.massgebend} · d ≥ {fmt(auslegung.dErf)} mm
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-sm sm:grid-cols-5">
+            <div className="grid grid-cols-3 gap-2 text-sm sm:grid-cols-4 lg:grid-cols-7">
               <AusMass label="Bolzen ⌀d" wert={auslegung.d} stark />
-              <AusMass label="Stangendicke t_S" wert={auslegung.tS} />
-              <AusMass label="Gabeldicke t_G" wert={auslegung.tG} />
-              <AusMass label="Stangenbreite b_S" wert={auslegung.bS} />
-              <AusMass label="Gabelbreite b_G" wert={auslegung.bG} />
+              <AusMass label="Dicke t_S" wert={auslegung.tS} />
+              <AusMass label="Dicke t_G" wert={auslegung.tG} />
+              <AusMass label="Steg b_S" wert={auslegung.bS} />
+              <AusMass label="Steg b_G" wert={auslegung.bG} />
+              <AusMass label="Rand c_S" wert={auslegung.cS} />
+              <AusMass label="Rand c_G" wert={auslegung.cG} />
             </div>
           </div>
         )}
@@ -336,15 +351,17 @@ export function BolzenverbindungPage() {
             <h3 className="mb-2 text-sm font-semibold text-slate-800">
               Erforderliche Mindestmaße (aus Lochleibung &amp; Zug)
             </h3>
-            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-              <MindMass label="Stangendicke t_S" wert={mindest.tSmin} ist={tS} />
-              <MindMass label="Gabeldicke t_G" wert={mindest.tGmin} ist={tG} />
-              <MindMass label="Stangenbreite b_S" wert={mindest.bSmin} ist={bS} />
-              <MindMass label="Gabelbreite b_G" wert={mindest.bGmin} ist={bG} />
+            <div className="grid grid-cols-3 gap-2 text-sm sm:grid-cols-6">
+              <MindMass label="Dicke t_S" wert={mindest.tSmin} ist={tS} />
+              <MindMass label="Dicke t_G" wert={mindest.tGmin} ist={tG} />
+              <MindMass label="Steg b_S" wert={mindest.bSmin} ist={bS} />
+              <MindMass label="Steg b_G" wert={mindest.bGmin} ist={bG} />
+              <MindMass label="Rand c_S" wert={mindest.cSmin} ist={cS} />
+              <MindMass label="Rand c_G" wert={mindest.cGmin} ist={cG} />
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              Dicke aus Lochleibung (für ⌀{fmt(anzeigeD)} mm), Breite aus Zug (mit
-              aktueller Dicke). Werte ≥ Mindestmaß wählen.
+              Dicke aus Lochleibung, Steg b aus Zug, Randabstand c aus Ausreißen
+              (für ⌀{fmt(anzeigeD)} mm, mit aktueller Dicke). Werte ≥ Mindestmaß.
             </p>
           </div>
         )}

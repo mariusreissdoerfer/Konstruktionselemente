@@ -93,10 +93,14 @@ export interface BolzenInput {
   tS: number
   /** Gabeldicke je Lasche t_G in mm */
   tG: number
-  /** Stangenbreite (Augenbreite) b_S in mm */
+  /** Stangenbreite (Steg, senkrecht zur Kraft) b_S in mm */
   bS: number
-  /** Gabelbreite je Lasche b_G in mm */
+  /** Gabelbreite je Lasche (Steg) b_G in mm */
   bG: number
+  /** Randabstand Stange in Kraftrichtung (Lochmitte→Stirnkante) c_S in mm */
+  cS: number
+  /** Randabstand Gabel in Kraftrichtung je Lasche c_G in mm */
+  cG: number
   /** Spalt a zwischen Stange und je Gabellasche in mm */
   spalt: number
   einbaufall: Einbaufall
@@ -199,7 +203,7 @@ function nachweis(
 
 /** Vollständige Berechnung (Nachweis) der Bolzenverbindung. */
 export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
-  const { F, d, tS, tG, bS, bG, spalt, einbaufall, lastfall, material } = input
+  const { F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material } = input
   const buchse = input.buchse ?? null
   const kugelgelenk = input.kugelgelenk ?? null
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[lastfall]
@@ -318,6 +322,29 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
     ),
   )
 
+  // ---- Ausreißen / Scherausriss am Kopf (Randabstand in Kraftrichtung) ----
+  const ausS = Math.max(cS - dLochS / 2, 0)
+  const ausG = Math.max(cG - dLochG / 2, 0)
+  const tauZul = cTau * material.Rm
+  nachweise.push(
+    nachweis(
+      'Ausreißen Stange',
+      'τ = F / (2 · (c_S − d/2) · t_S)',
+      `${fmt(F)} / (2 · (${fmt(cS)} − ${fmt(dLochS / 2)}) · ${fmt(tS)})`,
+      ausS > 0 ? F / (2 * ausS * tS) : Infinity,
+      tauZul,
+    ),
+  )
+  nachweise.push(
+    nachweis(
+      'Ausreißen Gabel',
+      'τ = F / (4 · (c_G − d/2) · t_G)',
+      `${fmt(F)} / (4 · (${fmt(cG)} − ${fmt(dLochG / 2)}) · ${fmt(tG)})`,
+      ausG > 0 ? F / (4 * ausG * tG) : Infinity,
+      tauZul,
+    ),
+  )
+
   // ---- Abscherung (zweischnittig) ----
   nachweise.push(
     nachweis(
@@ -355,6 +382,10 @@ export interface MindestMasse {
   bSmin: number
   /** erforderliche Gabelbreite (je Lasche) aus Zug (mit aktueller t_G) in mm */
   bGmin: number
+  /** erforderlicher Randabstand Stange aus Ausreißen in mm */
+  cSmin: number
+  /** erforderlicher Randabstand Gabel (je Lasche) aus Ausreißen in mm */
+  cGmin: number
 }
 
 /**
@@ -369,6 +400,7 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[input.lastfall]
   const pZul = faktoren.cP * material.Rm
   const sigmaZ = faktoren.cZug * material.Rm
+  const tauZul = faktoren.cTau * material.Rm
 
   const ort = buchse?.ort ?? 'beide'
   const dLochS = buchse && (ort === 'beide' || ort === 'stange') ? buchse.da : d
@@ -380,6 +412,8 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
     tGmin: round(F / (2 * d * pZul)),
     bSmin: round(dLochS + F / (tS * sigmaZ)),
     bGmin: round(dLochG + F / (2 * tG * sigmaZ)),
+    cSmin: round(dLochS / 2 + F / (2 * tS * tauZul)),
+    cGmin: round(dLochG / 2 + F / (4 * tG * tauZul)),
   }
 }
 
@@ -403,6 +437,10 @@ export interface AuslegungErgebnis {
   bS: number
   /** erforderliche Gabelbreite (je Lasche) in mm */
   bG: number
+  /** erforderlicher Randabstand Stange in Kraftrichtung in mm */
+  cS: number
+  /** erforderlicher Randabstand Gabel (je Lasche) in mm */
+  cG: number
   /** rechnerisch erforderlicher Mindestdurchmesser (vor Normung) in mm */
   dErf: number
   /** für den Durchmesser maßgebender Nachweis ("Abscherung" oder "Biegung") */
@@ -428,8 +466,8 @@ function naechsterNorm(d: number): number {
  * daher wird iteriert. Dicken/Breiten werden auf ganze mm aufgerundet.
  */
 export function legeBolzenAus(
-  input: Omit<BolzenInput, 'd' | 'tS' | 'tG' | 'bS' | 'bG'> &
-    Partial<Pick<BolzenInput, 'tS' | 'tG' | 'bS' | 'bG'>>,
+  input: Omit<BolzenInput, 'd' | 'tS' | 'tG' | 'bS' | 'bG' | 'cS' | 'cG'> &
+    Partial<Pick<BolzenInput, 'tS' | 'tG' | 'bS' | 'bG' | 'cS' | 'cG'>>,
 ): AuslegungErgebnis {
   const { F, spalt, einbaufall, lastfall, material } = input
   const buchse = input.buchse ?? null
@@ -485,7 +523,11 @@ export function legeBolzenAus(
   const bS = Math.ceil(dLochS + F / (tS * sigZ))
   const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
 
-  const kontrolle = berechneBolzen({ ...input, d, tS, tG, bS, bG })
+  // Ausreißen → erforderliche Randabstände in Kraftrichtung
+  const cS = Math.ceil(dLochS / 2 + F / (2 * tS * tauZul))
+  const cG = Math.ceil(dLochG / 2 + F / (4 * tG * tauZul))
 
-  return { d, tS, tG, bS, bG, dErf: round(dErf, 2), massgebend, kontrolle }
+  const kontrolle = berechneBolzen({ ...input, d, tS, tG, bS, bG, cS, cG })
+
+  return { d, tS, tG, bS, bG, cS, cG, dErf: round(dErf, 2), massgebend, kontrolle }
 }
