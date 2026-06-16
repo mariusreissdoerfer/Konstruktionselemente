@@ -223,13 +223,11 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         <rect x={xG1 - 34} y={boltTop - 5} width={11} height={dp + 10} rx={2} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.5} />
         <line x1={xEnd + 18} y1={boltTop - 4} x2={xEnd + 18} y2={boltBottom + 4} stroke={COL.bolzenStroke} strokeWidth={2} />
 
-        {/* Dickenmaße als Kette, abwechselnd auf zwei Höhen gestaffelt */}
+        {/* Dickenmaße – symmetrisch, daher t_G und Spalt a nur einmal (links) */}
         {[
           { x1: xG1, x2: xGap1, label: `t_G ${fmt(tG)}`, key: 'tG' as DimKey, val: tG },
           ...(spalt > 0 ? [{ x1: xGap1, x2: xStange, label: `a ${fmt(spalt)}`, key: 'spalt' as DimKey, val: spalt }] : []),
           { x1: xStange, x2: xGap2, label: `t_S ${fmt(tS)}`, key: 'tS' as DimKey, val: tS },
-          ...(spalt > 0 ? [{ x1: xGap2, x2: xG2, label: `a ${fmt(spalt)}`, key: 'spalt' as DimKey, val: spalt }] : []),
-          { x1: xG2, x2: xEnd, label: `t_G ${fmt(tG)}`, key: 'tG' as DimKey, val: tG },
         ].map((seg, i) => (
           <HDim key={i} x1={seg.x1} x2={seg.x2} y={dimY} wy={cy + hHalf} labelDy={i % 2 === 0 ? 14 : 28} label={seg.label} onClick={dimClick && dimClick(seg.key, seg.val)} />
         ))}
