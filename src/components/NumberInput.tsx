@@ -57,7 +57,15 @@ export function NumberInput({
           className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           value={display}
           onFocus={() => setEditing(String(value))}
-          onBlur={() => setEditing(null)}
+          onBlur={() => {
+            const raw = editing
+            setEditing(null)
+            if (raw == null) return
+            const v = parseDe(raw)
+            const obereGrenze = max ?? Number.POSITIVE_INFINITY
+            const geklemmt = Math.min(obereGrenze, Math.max(min, Number.isFinite(v) ? v : min))
+            if (geklemmt !== value) onChange(geklemmt)
+          }}
           onChange={(e) => {
             setEditing(e.target.value)
             onChange(parseDe(e.target.value))

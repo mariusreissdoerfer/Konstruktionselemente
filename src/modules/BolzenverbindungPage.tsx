@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { NumberInput } from '../components/NumberInput'
 import { SelectInput } from '../components/SelectInput'
@@ -101,6 +101,15 @@ export function BolzenverbindungPage() {
   const [kugelOn, setKugelOn] = useLocalStorage('ke.bolzen.kugelOn', false)
   const [kugelB, setKugelB] = useLocalStorage('ke.bolzen.kugelB', 20)
   const [kugelPzul, setKugelPzul] = useLocalStorage('ke.bolzen.kugelPzul', 150)
+
+  // Das Auge muss den Bolzen umschließen: b ≥ d (+ Mindeststeg). Wächst d,
+  // wandert die Augenkante mit nach außen (Lage), b kann nicht unter d fallen.
+  const bMin = d + 2
+  useEffect(() => {
+    if (bS < bMin) setBS(bMin)
+    if (bG < bMin) setBG(bMin)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d])
 
   const material = MATERIAL_BY_ID.get(materialId) ?? MATERIALS[0]
   const buchseMat = MATERIAL_BY_ID.get(buchseMatId) ?? BUCHSEN_MATERIALS[0]

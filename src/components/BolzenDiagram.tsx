@@ -71,8 +71,9 @@ type ViewProps = BolzenDiagramProps & { s: number }
 /* ----------------------------- Seitenansicht ----------------------------- */
 
 function Seitenansicht({ d, bS, bG, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s }: ViewProps) {
-  const rGab = (bG * s) / 2 // Gabel-Auge (hinten)
-  const rEye = (bS * s) / 2 // Stangen-Auge (vorne)
+  // Auge umschließt immer den Bolzen (b ≥ d)
+  const rGab = (Math.max(bG, d) * s) / 2 // Gabel-Auge (hinten)
+  const rEye = (Math.max(bS, d) * s) / 2 // Stangen-Auge (vorne)
   const rOuter = Math.max(rGab, rEye)
   const rp = (d * s) / 2
   const da = buchseStangeDa ?? buchseGabelDa
@@ -125,8 +126,8 @@ function Seitenansicht({ d, bS, bG, einbaufall, buchseStangeDa, buchseGabelDa, k
 
 function Vorderansicht({ F, d, tS, tG, bS, bG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s }: ViewProps) {
   const dp = d * s
-  const bGp = bG * s // Augenhöhe Gabel-Lasche
-  const bSp = bS * s // Augenhöhe Stange
+  const bGp = Math.max(bG, d) * s // Augenhöhe Gabel-Lasche (≥ Bolzen)
+  const bSp = Math.max(bS, d) * s // Augenhöhe Stange (≥ Bolzen)
   const hMax = Math.max(bGp, bSp)
   const gW = tG * s
   const gapW = spalt * s
