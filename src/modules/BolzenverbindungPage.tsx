@@ -178,8 +178,8 @@ export function BolzenverbindungPage() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:items-start">
-      {/* Eingaben */}
-      <aside className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      {/* Eingaben – eigene Scrollspalte */}
+      <aside className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
         <div className="flex rounded-lg bg-slate-100 p-1 text-sm font-medium">
           <button
             className={`flex-1 rounded-md px-3 py-1.5 transition ${
@@ -352,8 +352,8 @@ export function BolzenverbindungPage() {
         </div>
       </div>
 
-      {/* Ergebnisse – rechts */}
-      <section className="space-y-6">
+      {/* Ergebnisse – rechts, eigene Scrollspalte */}
+      <section className="space-y-6 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto xl:pr-1">
         {aus && (
           <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
             <div className="mb-2 flex items-baseline justify-between">
