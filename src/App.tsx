@@ -22,7 +22,7 @@ export default function App() {
   return (
     <div className="min-h-full bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">
               Konstruktionselemente
@@ -54,11 +54,11 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-6 py-8">
         {'element' in modul ? modul.element : null}
       </main>
 
-      <footer className="mx-auto max-w-6xl px-6 pb-10 pt-2 text-xs text-slate-400">
+      <footer className="mx-auto max-w-7xl px-6 pb-10 pt-2 text-xs text-slate-400">
         <p>
           Berechnung nach Roloff/Matek Maschinenelemente. Alle Ergebnisse sind
           Richtwerte und vor der Verwendung gegen die Originalliteratur und die

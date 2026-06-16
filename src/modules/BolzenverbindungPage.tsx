@@ -177,7 +177,7 @@ export function BolzenverbindungPage() {
   const mindest = mindestMasse({ ...gemeinsam, d: anzeigeD })
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+    <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)_380px] xl:items-start">
       {/* Eingaben */}
       <aside className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex rounded-lg bg-slate-100 p-1 text-sm font-medium">
@@ -331,8 +331,8 @@ export function BolzenverbindungPage() {
         </button>
       </aside>
 
-      {/* Diagramm + Ergebnisse */}
-      <section className="space-y-6">
+      {/* Visualisierung – mittig und fest (sticky) */}
+      <div className="xl:sticky xl:top-6 xl:self-start">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <BolzenDiagram
             d={anzeigeD}
@@ -350,7 +350,10 @@ export function BolzenverbindungPage() {
             buchseLenGabel={buchseOn && buchseOrt !== 'stange' ? lenG : null}
           />
         </div>
+      </div>
 
+      {/* Ergebnisse – rechts */}
+      <section className="space-y-6">
         {aus && (
           <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
             <div className="mb-2 flex items-baseline justify-between">
@@ -361,7 +364,7 @@ export function BolzenverbindungPage() {
                 d maßgebend: {auslegung.massgebend} · d ≥ {fmt(auslegung.dErf)} mm
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-sm sm:grid-cols-4 lg:grid-cols-7">
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 xl:grid-cols-2">
               <AusMass label="Bolzen ⌀d" wert={auslegung.d} stark />
               <AusMass label="Dicke t_S" wert={auslegung.tS} />
               <AusMass label="Dicke t_G" wert={auslegung.tG} />
@@ -378,7 +381,7 @@ export function BolzenverbindungPage() {
             <h3 className="mb-2 text-sm font-semibold text-slate-800">
               Erforderliche Mindestmaße (aus Lochleibung &amp; Zug)
             </h3>
-            <div className="grid grid-cols-3 gap-2 text-sm sm:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 xl:grid-cols-2">
               <MindMass label="Dicke t_S" wert={mindest.tSmin} ist={tS} />
               <MindMass label="Dicke t_G" wert={mindest.tGmin} ist={tG} />
               <MindMass label="Steg b_S" wert={mindest.bSmin} ist={bS} />
@@ -406,7 +409,7 @@ export function BolzenverbindungPage() {
                 : '✕ Nachweis nicht erfüllt'}
             </span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             {ergebnis.nachweise.map((n) => (
               <ResultCard key={n.name} n={n} />
             ))}
