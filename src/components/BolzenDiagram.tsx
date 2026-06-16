@@ -199,15 +199,9 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         {/* Steg-Breiten b */}
         <HDim x1={sideCx - wG / 2} x2={sideCx + wG / 2} y={cy - hHalf - 14} wy={cy - ehG / 2} below={false} label={`b_G ${fmt(bG)}`} onClick={dimClick && dimClick('bG', bG)} />
         <HDim x1={sideCx - wS / 2} x2={sideCx + wS / 2} y={bSdimY} wy={cy + ehS / 2} label={`b_S ${fmt(bS)}`} onClick={dimClick && dimClick('bS', bS)} />
-        {/* Randabstände c (in Kraftrichtung) – kleineres Maß innen */}
-        {[
-          { key: 'cS' as DimKey, val: cS, label: `c_S ${fmt(cS)}` },
-          { key: 'cG' as DimKey, val: cG, label: `c_G ${fmt(cG)}` },
-        ]
-          .sort((a, b) => a.val - b.val)
-          .map((cd, i) => (
-            <VDim key={cd.key} x={sideCx + wOuter / 2 + 18 + i * 30} yTop={cy - cd.val * s} yBot={cy} wx={sideCx + wOuter / 2} side="right" label={cd.label} onClick={dimClick && dimClick(cd.key, cd.val)} />
-          ))}
+        {/* Randabstände c (Kraftrichtung): c_S vom Mittelpunkt nach oben, c_G nach unten */}
+        <VDim x={sideCx + wOuter / 2 + 20} yTop={cy - cS * s} yBot={cy} wx={sideCx} wxBot={sideCx + wS / 2} side="right" label={`c_S ${fmt(cS)}`} onClick={dimClick && dimClick('cS', cS)} />
+        <VDim x={sideCx + wOuter / 2 + 20} yTop={cy} yBot={cy + cG * s} wx={sideCx + wG / 2} wxBot={sideCx} side="right" label={`c_G ${fmt(cG)}`} onClick={dimClick && dimClick('cG', cG)} />
       </g>
 
       {/* ===================== Vorderansicht ===================== */}
@@ -237,11 +231,11 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
 
         {/* Dickenmaße – symmetrisch (t_G, a nur einmal) und gestuft auf eigene Höhen */}
         {[
-          { x1: xG1, x2: xGap1, label: `t_G ${fmt(tG)}`, key: 'tG' as DimKey, val: tG },
-          ...(spalt > 0 ? [{ x1: xGap1, x2: xStange, label: `a ${fmt(spalt)}`, key: 'spalt' as DimKey, val: spalt }] : []),
-          { x1: xStange, x2: xGap2, label: `t_S ${fmt(tS)}`, key: 'tS' as DimKey, val: tS },
+          { x1: xG1, x2: xGap1, wy: cy + ehG / 2, wy2: cy + ehG / 2, label: `t_G ${fmt(tG)}`, key: 'tG' as DimKey, val: tG },
+          ...(spalt > 0 ? [{ x1: xGap1, x2: xStange, wy: cy + ehG / 2, wy2: cy + ehS / 2, label: `a ${fmt(spalt)}`, key: 'spalt' as DimKey, val: spalt }] : []),
+          { x1: xStange, x2: xGap2, wy: cy + ehS / 2, wy2: cy + ehS / 2, label: `t_S ${fmt(tS)}`, key: 'tS' as DimKey, val: tS },
         ].map((seg, i) => (
-          <HDim key={i} x1={seg.x1} x2={seg.x2} y={dimY + i * tStep} wy={cy + hHalf} labelDy={13} label={seg.label} onClick={dimClick && dimClick(seg.key, seg.val)} />
+          <HDim key={i} x1={seg.x1} x2={seg.x2} y={dimY + i * tStep} wy={seg.wy} wy2={seg.wy2} labelDy={13} label={seg.label} onClick={dimClick && dimClick(seg.key, seg.val)} />
         ))}
 
         {/* Buchsenlängen L_B (2. Reihe, mit Hilfslinien, nur wenn ≠ Blechdicke) */}
@@ -254,9 +248,9 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
 
         {/* Durchmesser links: ⌀d, ⌀d_a,S, ⌀d_a,G – nach Größe gestaffelt, mit Hilfslinien */}
         {[
-          { key: 'd' as DimKey, val: d, label: `⌀d ${fmt(d)}` },
-          ...(buchseStangeDa ? [{ key: 'daStange' as DimKey, val: buchseStangeDa, label: `⌀d_a,S ${fmt(buchseStangeDa)}` }] : []),
-          ...(buchseGabelDa ? [{ key: 'daGabel' as DimKey, val: buchseGabelDa, label: `⌀d_a,G ${fmt(buchseGabelDa)}` }] : []),
+          { key: 'd' as DimKey, val: d, wx: xG1 - 34, label: `⌀d ${fmt(d)}` },
+          ...(buchseStangeDa ? [{ key: 'daStange' as DimKey, val: buchseStangeDa, wx: xStange + sW / 2 - (Math.min(buchseLenStange ?? tS, tS) * s) / 2, label: `⌀d_a,S ${fmt(buchseStangeDa)}` }] : []),
+          ...(buchseGabelDa ? [{ key: 'daGabel' as DimKey, val: buchseGabelDa, wx: xG1 + gW / 2 - (Math.min(buchseLenGabel ?? tG, tG) * s) / 2, label: `⌀d_a,G ${fmt(buchseGabelDa)}` }] : []),
         ]
           .sort((a, b) => a.val - b.val)
           .map((dd, i) => (
@@ -265,7 +259,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
               x={xLeftDim - 44 - i * 22}
               yTop={cy - (dd.val * s) / 2}
               yBot={cy + (dd.val * s) / 2}
-              wx={xG1 - 34}
+              wx={dd.wx}
               side="left"
               label={dd.label}
               onClick={dimClick && dimClick(dd.key, dd.val)}
@@ -371,17 +365,18 @@ function DimLabel({ x, y, rotate, label, onClick }: { x: number; y: number; rota
  *  Passt die Zahl nicht zwischen die Maßpfeile, wandert sie auf die andere
  *  Seite der Maßlinie (kein Überlappen mit Nachbarn). autoFlip=false erzwingt
  *  die Standardseite. */
-function HDim({ x1, x2, y, wy, label, onClick, below = true, autoFlip = true, labelDy }: { x1: number; x2: number; y: number; wy?: number; below?: boolean; autoFlip?: boolean; labelDy?: number } & DimText) {
+function HDim({ x1, x2, y, wy, wy2, label, onClick, below = true, autoFlip = true, labelDy }: { x1: number; x2: number; y: number; wy?: number; wy2?: number; below?: boolean; autoFlip?: boolean; labelDy?: number } & DimText) {
   const w = x2 - x1
   const big = w >= 3 * AL
   const fits = w >= label.length * 5.6 + 4
-  const ext = wy != null ? (wy <= y ? 5 : -5) : 0
+  const w1 = wy
+  const w2 = wy2 ?? wy
   // feste Label-Höhe (gestaffelte Kette) oder automatische Seitenwahl
   const ly = labelDy != null ? y + labelDy : (autoFlip && !fits ? !below : below) ? y + 13 : y - 5
   return (
     <g stroke={COL.mass} strokeWidth={1} fill={COL.mass}>
-      {wy != null && <line x1={x1} y1={wy} x2={x1} y2={y + ext} strokeWidth={0.6} opacity={0.7} />}
-      {wy != null && <line x1={x2} y1={wy} x2={x2} y2={y + ext} strokeWidth={0.6} opacity={0.7} />}
+      {w1 != null && <line x1={x1} y1={w1} x2={x1} y2={y + (w1 <= y ? 4 : -4)} strokeWidth={0.6} opacity={0.7} />}
+      {w2 != null && <line x1={x2} y1={w2} x2={x2} y2={y + (w2 <= y ? 4 : -4)} strokeWidth={0.6} opacity={0.7} />}
       <line x1={big ? x1 : x1 - AL} y1={y} x2={big ? x2 : x2 + AL} y2={y} />
       <ArrowH x={x1} y={y} dir={big ? -1 : 1} />
       <ArrowH x={x2} y={y} dir={big ? 1 : -1} />
@@ -391,15 +386,16 @@ function HDim({ x1, x2, y, wy, label, onClick, below = true, autoFlip = true, la
 }
 
 /** Senkrechtes Maß zwischen yTop..yBot bei x; Hilfslinien ab wx (optional). */
-function VDim({ x, yTop, yBot, wx, label, onClick, side = 'left' }: { x: number; yTop: number; yBot: number; wx?: number; side?: 'left' | 'right' } & DimText) {
+function VDim({ x, yTop, yBot, wx, wxBot, label, onClick, side = 'left' }: { x: number; yTop: number; yBot: number; wx?: number; wxBot?: number; side?: 'left' | 'right' } & DimText) {
   const big = yBot - yTop >= 3 * AL
-  const ext = wx != null ? (wx <= x ? 5 : -5) : 0
   const mid = (yTop + yBot) / 2
   const lx = side === 'right' ? x + 11 : x - 11
+  const wt = wx
+  const wb = wxBot ?? wx
   return (
     <g stroke={COL.mass} strokeWidth={1} fill={COL.mass}>
-      {wx != null && <line x1={wx} y1={yTop} x2={x + ext} y2={yTop} strokeWidth={0.6} opacity={0.7} />}
-      {wx != null && <line x1={wx} y1={yBot} x2={x + ext} y2={yBot} strokeWidth={0.6} opacity={0.7} />}
+      {wt != null && <line x1={wt} y1={yTop} x2={x + (wt <= x ? 4 : -4)} y2={yTop} strokeWidth={0.6} opacity={0.7} />}
+      {wb != null && <line x1={wb} y1={yBot} x2={x + (wb <= x ? 4 : -4)} y2={yBot} strokeWidth={0.6} opacity={0.7} />}
       <line x1={x} y1={big ? yTop : yTop - AL} x2={x} y2={big ? yBot : yBot + AL} />
       <ArrowV x={x} y={yTop} dir={big ? -1 : 1} />
       <ArrowV x={x} y={yBot} dir={big ? 1 : -1} />
