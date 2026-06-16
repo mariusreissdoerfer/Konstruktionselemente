@@ -179,21 +179,21 @@ export function BolzenverbindungPage() {
           </button>
         </div>
 
-        <NumberInput label="Belastung" symbol="F" unit="N" value={F} onChange={setF} min={100} max={500000} step={100} />
+        <NumberInput label="Belastung" symbol="F" unit="N" value={F} onChange={setF} min={100} max={10000000} step={1000} />
 
         {modus === 'nachweis' && (
-          <NumberInput label="Bolzendurchmesser" symbol="d" unit="mm" value={d} onChange={setD} min={3} max={100} step={1} />
+          <NumberInput label="Bolzendurchmesser" symbol="d" unit="mm" value={d} onChange={setD} min={3} max={800} step={1} />
         )}
 
         {modus === 'nachweis' && (
           <>
-            <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={120} step={1} />
-            <NumberInput label="Gabeldicke (je Lasche)" symbol="t_G" unit="mm" value={tG} onChange={setTG} min={2} max={120} step={1} />
-            <NumberInput label="Stangenbreite (Auge)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={300} step={1} />
-            <NumberInput label="Gabelbreite (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={300} step={1} />
+            <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={600} step={1} />
+            <NumberInput label="Gabeldicke (je Lasche)" symbol="t_G" unit="mm" value={tG} onChange={setTG} min={2} max={600} step={1} />
+            <NumberInput label="Stangenbreite (Auge)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={1500} step={1} />
+            <NumberInput label="Gabelbreite (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={1500} step={1} />
           </>
         )}
-        <NumberInput label="Spalt zw. Blechen" symbol="a" unit="mm" value={spalt} onChange={setSpalt} min={0} max={50} step={0.5} />
+        <NumberInput label="Spalt zw. Blechen" symbol="a" unit="mm" value={spalt} onChange={setSpalt} min={0} max={200} step={1} />
 
         <SelectInput<Einbaufall>
           label="Einbaufall"
@@ -237,7 +237,7 @@ export function BolzenverbindungPage() {
           <Toggle label="Buchsen einsetzen" checked={buchseOn} onChange={setBuchseOn} />
           {buchseOn && (
             <div className="space-y-3 border-l-2 border-amber-300 pl-3">
-              <NumberInput label="Außendurchmesser" symbol="d_a" unit="mm" value={buchseDa} onChange={setBuchseDa} min={d + 1} max={150} step={1} />
+              <NumberInput label="Außendurchmesser" symbol="d_a" unit="mm" value={buchseDa} onChange={setBuchseDa} min={d + 1} max={1500} step={1} />
               <SelectInput<BuchseOrt>
                 label="Einbauort"
                 value={buchseOrt}
@@ -264,7 +264,7 @@ export function BolzenverbindungPage() {
           <Toggle label="Kugelgelenk in Stange" checked={kugelOn} onChange={setKugelOn} />
           {kugelOn && (
             <div className="space-y-3 border-l-2 border-slate-400 pl-3">
-              <NumberInput label="Lagerbreite" symbol="B" unit="mm" value={kugelB} onChange={setKugelB} min={2} max={120} step={1} />
+              <NumberInput label="Lagerbreite" symbol="B" unit="mm" value={kugelB} onChange={setKugelB} min={2} max={600} step={1} />
               <NumberInput label="zul. Lagerpressung" symbol="p_zul" unit="N/mm²" value={kugelPzul} onChange={setKugelPzul} min={10} max={500} step={5} />
               <p className="text-xs text-slate-400">
                 Spezifische Lagerbelastung ist herstellerabhängig (Datenblatt).

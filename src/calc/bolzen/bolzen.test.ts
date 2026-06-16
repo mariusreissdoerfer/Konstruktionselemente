@@ -210,6 +210,14 @@ describe('legeBolzenAus – vollständige Auslegung', () => {
     expect(r.kontrolle.bestanden).toBe(true)
   })
 
+  it('erfüllt alle Nachweise bei 10 MN', () => {
+    const r = legeBolzenAus({
+      F: 10_000_000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S235,
+    })
+    expect(r.kontrolle.bestanden).toBe(true)
+    expect(r.d).toBeLessThanOrEqual(800)
+  })
+
   it('erfüllt alle Nachweise mit Buchse', () => {
     const r = legeBolzenAus({
       F: 40000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S235,

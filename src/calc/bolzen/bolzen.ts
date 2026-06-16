@@ -384,9 +384,12 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
 }
 
 // Genormte Bolzendurchmesser (Auswahl nach DIN, R10/R20), für die Auslegung.
+// Bis 800 mm erweitert, damit auch sehr große Kräfte (bis ~10 MN) ausgelegt
+// werden können.
 export const NORM_DURCHMESSER = [
   3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 30, 32, 36, 40, 45, 50,
-  56, 63, 70, 80, 90, 100,
+  56, 63, 70, 80, 90, 100, 110, 125, 140, 160, 180, 200, 220, 250, 280, 320,
+  360, 400, 450, 500, 560, 630, 710, 800,
 ]
 
 export interface AuslegungErgebnis {
