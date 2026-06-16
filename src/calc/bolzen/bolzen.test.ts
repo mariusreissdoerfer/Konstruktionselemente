@@ -146,24 +146,49 @@ describe('Zug im Nettoquerschnitt', () => {
 })
 
 describe('Ausreißen am Kopf (Randabstand c)', () => {
-  it('Ausreißen Stange τ = F/(2·(c_S − d/2)·t_S)', () => {
+  it('Scherausriss Stange τ = F/(2·(c_S − d/2)·t_S)', () => {
     const r = berechneBolzen(base)
-    const a = r.nachweise.find((n) => n.name === 'Ausreißen Stange')!
+    const a = r.nachweise.find((n) => n.name === 'Stange – Scherausriss')!
     // 20000 / (2·(25−10)·20) = 20000/600 = 33,33
     expect(a.vorhanden).toBeCloseTo(33.33, 1)
     expect(a.zulaessig).toBeCloseTo(0.15 * S235.Rm, 2)
   })
-  it('Ausreißen Gabel τ = F/(4·(c_G − d/2)·t_G)', () => {
+  it('Scherausriss Gabel τ = F/(4·(c_G − d/2)·t_G)', () => {
     const r = berechneBolzen(base)
-    const a = r.nachweise.find((n) => n.name === 'Ausreißen Gabel')!
-    // 20000 / (4·(25−10)·12) = 20000/720 = 27,78
+    const a = r.nachweise.find((n) => n.name === 'Gabel – Scherausriss')!
     expect(a.vorhanden).toBeCloseTo(27.78, 1)
   })
-  it('zu kleiner Randabstand → Ausreißen nicht erfüllt', () => {
+  it('Kopfzug nutzt σ_z,zul (größerer zulässiger Wert)', () => {
+    const r = berechneBolzen({ ...base, ausreissModell: 'kopfzug' })
+    const a = r.nachweise.find((n) => n.name === 'Stange – Kopfzug')!
+    expect(a.vorhanden).toBeCloseTo(33.33, 1)
+    expect(a.zulaessig).toBeCloseTo(0.33 * S235.Rm, 2)
+  })
+  it('Eurocode liefert mm-Nachweis (a_erf ≤ c−d/2)', () => {
+    const r = berechneBolzen({ ...base, ausreissModell: 'eurocode' })
+    const a = r.nachweise.find((n) => n.name.includes('Stange') && n.name.includes('EC'))!
+    expect(a.einheit).toBe('mm')
+    // a_erf = 20000/(2·20·235) + 2·20/3 = 2,13 + 13,33 = 15,46 ; a = 25−10 = 15
+    expect(a.vorhanden).toBeCloseTo(15.46, 1)
+    expect(a.zulaessig).toBeCloseTo(15, 1)
+  })
+  it('zu kleiner Randabstand → Scherausriss nicht erfüllt', () => {
     const r = berechneBolzen({ ...base, cS: 11 })
-    const a = r.nachweise.find((n) => n.name === 'Ausreißen Stange')!
+    const a = r.nachweise.find((n) => n.name === 'Stange – Scherausriss')!
     expect(a.erfuellt).toBe(false)
   })
+})
+
+describe('Auslegung deckt das gewählte Ausreißmodell', () => {
+  for (const m of ['schub', 'kopfzug', 'eurocode'] as const) {
+    it(`alle Nachweise erfüllt – Modell ${m}`, () => {
+      const r = legeBolzenAus({
+        F: 60000, spalt: 0, einbaufall: 1, lastfall: 'schwellend',
+        material: S235, ausreissModell: m,
+      })
+      expect(r.kontrolle.bestanden).toBe(true)
+    })
+  }
 })
 
 describe('mindestMasse – Blechdicke & Breite', () => {

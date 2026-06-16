@@ -106,6 +106,8 @@ export interface BolzenInput {
   einbaufall: Einbaufall
   lastfall: Lastfall
   material: Material
+  /** Modell für den Kopf-/Ausreißnachweis (Default 'schub') */
+  ausreissModell?: AusreissModell
   /** optionale Buchse */
   buchse?: BuchseConfig | null
   /** optionales Kugelgelenk in der Stange */
@@ -188,6 +190,7 @@ function nachweis(
   einsetzen: string,
   vorhanden: number,
   zulaessig: number,
+  einheit = 'N/mm²',
 ): Nachweis {
   const sicherheit = vorhanden > 0 ? zulaessig / vorhanden : Infinity
   return {
@@ -198,7 +201,83 @@ function nachweis(
     zulaessig: round(zulaessig),
     sicherheit: round(sicherheit),
     erfuellt: vorhanden <= zulaessig,
+    einheit,
   }
+}
+
+/** Modell für den Kopf-/Ausreißnachweis am Auge. */
+export type AusreissModell = 'schub' | 'kopfzug' | 'eurocode'
+
+export const AUSREISS_LABEL: Record<AusreissModell, string> = {
+  schub: 'Scherausriss (Schub)',
+  kopfzug: 'Kopfzug (Stirnzug)',
+  eurocode: 'Eurocode EN 1993-1-8',
+}
+
+/**
+ * Erforderlicher Randabstand c (Lochmitte → Stirnkante) für ein Bauteil.
+ *  nFlaechen = 2 (Stange, ein Blech, 2 Scherflächen) bzw. 4 (Gabel, zwei Laschen).
+ */
+export function randAbstandErf(
+  F: number,
+  t: number,
+  dLoch: number,
+  nFlaechen: number,
+  modell: AusreissModell,
+  fak: ZulFaktoren,
+  material: Material,
+): number {
+  if (modell === 'kopfzug') return dLoch / 2 + F / (nFlaechen * t * fak.cZug * material.Rm)
+  if (modell === 'eurocode') {
+    const bleche = nFlaechen / 2 // 1 (Stange) oder 2 (Gabel)
+    return dLoch / 2 + F / bleche / (2 * t * material.Re) + (2 * dLoch) / 3
+  }
+  // schub
+  return dLoch / 2 + F / (nFlaechen * t * fak.cTau * material.Rm)
+}
+
+/** Ausreiß-/Kopfnachweis für ein Bauteil je nach gewähltem Modell. */
+function ausreissNachweis(
+  name: string,
+  F: number,
+  t: number,
+  dLoch: number,
+  c: number,
+  nFlaechen: number,
+  modell: AusreissModell,
+  fak: ZulFaktoren,
+  material: Material,
+): Nachweis {
+  const L = Math.max(c - dLoch / 2, 0) // tragende Steglänge
+  const n = nFlaechen
+  if (modell === 'kopfzug') {
+    return nachweis(
+      `${name} – Kopfzug`,
+      `σ = F / (${n} · (c − d/2) · t)`,
+      `${fmt(F)} / (${n} · ${fmt(L)} · ${fmt(t)})`,
+      L > 0 ? F / (n * L * t) : Infinity,
+      fak.cZug * material.Rm,
+    )
+  }
+  if (modell === 'eurocode') {
+    const bleche = n / 2
+    const aErf = F / bleche / (2 * t * material.Re) + (2 * dLoch) / 3
+    return nachweis(
+      `${name} – Ausreißen (EC 1993-1-8)`,
+      'a_erf = F/(2·t·f_y) + ⅔·d ≤ a = c − d/2',
+      `${fmt(aErf)} ≤ ${fmt(L)}`,
+      aErf,
+      L,
+      'mm',
+    )
+  }
+  return nachweis(
+    `${name} – Scherausriss`,
+    `τ = F / (${n} · (c − d/2) · t)`,
+    `${fmt(F)} / (${n} · ${fmt(L)} · ${fmt(t)})`,
+    L > 0 ? F / (n * L * t) : Infinity,
+    fak.cTau * material.Rm,
+  )
 }
 
 /** Vollständige Berechnung (Nachweis) der Bolzenverbindung. */
@@ -322,28 +401,10 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
     ),
   )
 
-  // ---- Ausreißen / Scherausriss am Kopf (Randabstand in Kraftrichtung) ----
-  const ausS = Math.max(cS - dLochS / 2, 0)
-  const ausG = Math.max(cG - dLochG / 2, 0)
-  const tauZul = cTau * material.Rm
-  nachweise.push(
-    nachweis(
-      'Ausreißen Stange',
-      'τ = F / (2 · (c_S − d/2) · t_S)',
-      `${fmt(F)} / (2 · (${fmt(cS)} − ${fmt(dLochS / 2)}) · ${fmt(tS)})`,
-      ausS > 0 ? F / (2 * ausS * tS) : Infinity,
-      tauZul,
-    ),
-  )
-  nachweise.push(
-    nachweis(
-      'Ausreißen Gabel',
-      'τ = F / (4 · (c_G − d/2) · t_G)',
-      `${fmt(F)} / (4 · (${fmt(cG)} − ${fmt(dLochG / 2)}) · ${fmt(tG)})`,
-      ausG > 0 ? F / (4 * ausG * tG) : Infinity,
-      tauZul,
-    ),
-  )
+  // ---- Ausreißen / Kopf am Auge (Randabstand in Kraftrichtung), je Modell ----
+  const modell = input.ausreissModell ?? 'schub'
+  nachweise.push(ausreissNachweis('Stange', F, tS, dLochS, cS, 2, modell, faktoren, material))
+  nachweise.push(ausreissNachweis('Gabel', F, tG, dLochG, cG, 4, modell, faktoren, material))
 
   // ---- Abscherung (zweischnittig) ----
   nachweise.push(
@@ -400,7 +461,7 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[input.lastfall]
   const pZul = faktoren.cP * material.Rm
   const sigmaZ = faktoren.cZug * material.Rm
-  const tauZul = faktoren.cTau * material.Rm
+  const modell = input.ausreissModell ?? 'schub'
 
   const ort = buchse?.ort ?? 'beide'
   const dLochS = buchse && (ort === 'beide' || ort === 'stange') ? buchse.da : d
@@ -412,8 +473,8 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
     tGmin: round(F / (2 * d * pZul)),
     bSmin: round(dLochS + F / (tS * sigmaZ)),
     bGmin: round(dLochG + F / (2 * tG * sigmaZ)),
-    cSmin: round(dLochS / 2 + F / (2 * tS * tauZul)),
-    cGmin: round(dLochG / 2 + F / (4 * tG * tauZul)),
+    cSmin: round(randAbstandErf(F, tS, dLochS, 2, modell, faktoren, material)),
+    cGmin: round(randAbstandErf(F, tG, dLochG, 4, modell, faktoren, material)),
   }
 }
 
@@ -523,9 +584,10 @@ export function legeBolzenAus(
   const bS = Math.ceil(dLochS + F / (tS * sigZ))
   const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
 
-  // Ausreißen → erforderliche Randabstände in Kraftrichtung
-  const cS = Math.ceil(dLochS / 2 + F / (2 * tS * tauZul))
-  const cG = Math.ceil(dLochG / 2 + F / (4 * tG * tauZul))
+  // Ausreißen → erforderliche Randabstände in Kraftrichtung (gewähltes Modell)
+  const modell = input.ausreissModell ?? 'schub'
+  const cS = Math.ceil(randAbstandErf(F, tS, dLochS, 2, modell, fak, material))
+  const cG = Math.ceil(randAbstandErf(F, tG, dLochG, 4, modell, fak, material))
 
   const kontrolle = berechneBolzen({ ...input, d, tS, tG, bS, bG, cS, cG })
 

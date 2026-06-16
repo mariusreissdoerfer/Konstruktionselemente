@@ -21,6 +21,7 @@ function Ampel({ erfuellt }: { erfuellt: boolean }) {
 }
 
 export function ResultCard({ n }: { n: Nachweis }) {
+  const einheit = n.einheit ?? 'N/mm²'
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
@@ -31,8 +32,8 @@ export function ResultCard({ n }: { n: Nachweis }) {
       <div className="mt-2 font-mono text-xs text-slate-500">{n.formel}</div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <Kennwert label="vorhanden" value={n.vorhanden} unit="N/mm²" />
-        <Kennwert label="zulässig" value={n.zulaessig} unit="N/mm²" />
+        <Kennwert label={einheit === 'mm' ? 'erforderlich' : 'vorhanden'} value={n.vorhanden} unit={einheit} />
+        <Kennwert label={einheit === 'mm' ? 'vorhanden' : 'zulässig'} value={n.zulaessig} unit={einheit} />
         <Kennwert
           label="Sicherheit"
           value={n.sicherheit}
@@ -45,7 +46,7 @@ export function ResultCard({ n }: { n: Nachweis }) {
           Rechenweg
         </summary>
         <div className="mt-1 font-mono">
-          = {n.einsetzen} = {fmt(n.vorhanden)} N/mm²
+          = {n.einsetzen}{einheit === 'mm' ? '' : ` = ${fmt(n.vorhanden)} ${einheit}`}
         </div>
       </details>
     </div>
