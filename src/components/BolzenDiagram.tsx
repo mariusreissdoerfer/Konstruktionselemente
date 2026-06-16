@@ -138,9 +138,11 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const earsTopG = cy - ehG / 2
   const earsTopS = cy - ehS / 2
 
-  // untere Bereiche
-  const dimY = cy + hHalf + 22 // Dickenmaße (Front), Reihe 1 (gestaffelt +14/+28)
-  const dimY2 = dimY + 42 // Buchsenlängen, Reihe 2 (unter den gestaffelten t-Maßen)
+  // untere Bereiche – Dickenmaße gestuft (jede eigene Maßlinie)
+  const dimY = cy + hHalf + 22
+  const tStep = 18
+  const tCount = spalt > 0 ? 3 : 2
+  const dimY2 = dimY + (tCount - 1) * tStep + 30 // Buchsenlängen darunter
   const rodBottomF = dimY2 + 18 // Stangenschaft endet unter den Maßreihen
   const fEndYF = rodBottomF + 22
   const legendY = fEndYF + 24
@@ -233,13 +235,13 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         <rect x={xG1 - 34} y={boltTop - 5} width={11} height={dp + 10} rx={2} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.5} />
         <line x1={xEnd + 18} y1={boltTop - 4} x2={xEnd + 18} y2={boltBottom + 4} stroke={COL.bolzenStroke} strokeWidth={2} />
 
-        {/* Dickenmaße – symmetrisch, daher t_G und Spalt a nur einmal (links) */}
+        {/* Dickenmaße – symmetrisch (t_G, a nur einmal) und gestuft auf eigene Höhen */}
         {[
           { x1: xG1, x2: xGap1, label: `t_G ${fmt(tG)}`, key: 'tG' as DimKey, val: tG },
           ...(spalt > 0 ? [{ x1: xGap1, x2: xStange, label: `a ${fmt(spalt)}`, key: 'spalt' as DimKey, val: spalt }] : []),
           { x1: xStange, x2: xGap2, label: `t_S ${fmt(tS)}`, key: 'tS' as DimKey, val: tS },
         ].map((seg, i) => (
-          <HDim key={i} x1={seg.x1} x2={seg.x2} y={dimY} wy={cy + hHalf} labelDy={i % 2 === 0 ? 14 : 28} label={seg.label} onClick={dimClick && dimClick(seg.key, seg.val)} />
+          <HDim key={i} x1={seg.x1} x2={seg.x2} y={dimY + i * tStep} wy={cy + hHalf} labelDy={13} label={seg.label} onClick={dimClick && dimClick(seg.key, seg.val)} />
         ))}
 
         {/* Buchsenlängen L_B (2. Reihe, mit Hilfslinien, nur wenn ≠ Blechdicke) */}
