@@ -188,6 +188,10 @@ export function BolzenverbindungPage() {
       case 'cS': setCS(clamp(value, cMin, 1000)); break
       case 'cG': setCG(clamp(value, cMin, 1000)); break
       case 'spalt': setSpalt(clamp(value, 0, 200)); break
+      case 'daStange': setBuchseDaS(clamp(value, d + 1, 1500)); break
+      case 'daGabel': setBuchseDaG(clamp(value, d + 1, 1500)); break
+      case 'lenStange': setBuchseLenS(clamp(value, 1, 600)); break
+      case 'lenGabel': setBuchseLenG(clamp(value, 1, 600)); break
     }
   }
 
