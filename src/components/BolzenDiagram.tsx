@@ -1,9 +1,7 @@
 import { fmt } from '../calc/format'
-import { biegemoment } from '../calc/bolzen/bolzen'
 import type { Einbaufall } from '../calc/types'
 
 export interface BolzenDiagramProps {
-  F: number
   d: number
   tS: number
   tG: number
@@ -21,8 +19,10 @@ export interface BolzenDiagramProps {
   buchseStangeDa: number | null
   /** Buchsen-Außendurchmesser in der Gabel (mm) oder null */
   buchseGabelDa: number | null
-  /** Lagerbreite des Kugelgelenks (mm) oder null */
-  kugelB: number | null
+  /** Buchsenlänge Stange (mm) oder null */
+  buchseLenStange: number | null
+  /** Buchsenlänge Gabel je Lasche (mm) oder null */
+  buchseLenGabel: number | null
 }
 
 const COL = {
@@ -65,7 +65,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
       <figure className="lg:flex-1">
         <Vorderansicht {...props} s={s} />
         <figcaption className="mt-1 text-center text-xs text-slate-400">
-          Vorderansicht – Randabstand c (in Kraftrichtung) + Biegemoment
+          Vorderansicht – Randabstand c (in Kraftrichtung)
         </figcaption>
       </figure>
     </div>
@@ -78,7 +78,7 @@ type ViewProps = BolzenDiagramProps & { s: number }
 /* Blick entlang der Bolzenachse: Augenfläche. Zeigt Steg-Breite b (quer)
    und Randabstand c (Höhe). */
 
-function Seitenansicht({ d, bS, bG, cS, cG, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s }: ViewProps) {
+function Seitenansicht({ d, bS, bG, cS, cG, einbaufall, buchseStangeDa, buchseGabelDa, s }: ViewProps) {
   const wG = Math.max(bG, d) * s
   const wS = Math.max(bS, d) * s
   const hG = Math.max(2 * cG, d) * s
@@ -110,12 +110,6 @@ function Seitenansicht({ d, bS, bG, cS, cG, einbaufall, buchseStangeDa, buchseGa
       <rect x={cx - wS / 2} y={cy - hS / 2} width={wS} height={hS} rx={Math.min(wS, hS) / 2} fill={stangeFest ? COL.fest : COL.stange} stroke={COL.stroke} strokeWidth={1.5} />
 
       {rb > 0 && <circle cx={cx} cy={cy} r={rb} fill={COL.buchse} stroke={COL.buchseStroke} strokeWidth={1.2} />}
-      {kugelB && (
-        <>
-          <circle cx={cx} cy={cy} r={Math.min(wS, hS) / 2 - 3} fill={COL.ball} stroke={COL.ballDark} strokeWidth={1.3} />
-          <circle cx={cx} cy={cy} r={Math.min(wS, hS) / 2 - 8} fill="#eef2f7" stroke={COL.ballDark} strokeWidth={1.1} />
-        </>
-      )}
       {/* Bolzen (Loch) */}
       <circle cx={cx} cy={cy} r={rp} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.5} />
 
@@ -140,7 +134,7 @@ function Seitenansicht({ d, bS, bG, cS, cG, einbaufall, buchseStangeDa, buchseGa
 /* Schnitt durch die Bolzenachse: zeigt Dicken t, Loch d, Randabstand c
    (in Kraftrichtung) und den Biegemomentverlauf. */
 
-function Vorderansicht({ F, d, tS, tG, cS, cG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, kugelB, s }: ViewProps) {
+function Vorderansicht({ d, tS, tG, cS, cG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, s }: ViewProps) {
   const dp = d * s
   const ehG = Math.max(2 * cG, d) * s // Augenhöhe Gabel (Kraftrichtung)
   const ehS = Math.max(2 * cS, d) * s // Augenhöhe Stange
@@ -168,10 +162,7 @@ function Vorderansicht({ F, d, tS, tG, cS, cG, spalt, einbaufall, buchseStangeDa
   const dimY = bottom + 22
   const rodBottom = dimY + 32
   const fEndY = rodBottom + 24
-  const momBase = fEndY + 34
-  const momAmp = 26
-  const momLabelY = momBase + momAmp + 22
-  const legendY = momLabelY + 20
+  const legendY = fEndY + 26
   const H = legendY + 8
 
   const gabelFest = einbaufall === 2
@@ -183,33 +174,15 @@ function Vorderansicht({ F, d, tS, tG, cS, cG, spalt, einbaufall, buchseStangeDa
   const rodFill = stangeFest ? COL.fest : COL.stange
   const rodStroke = stangeFest ? COL.festStroke : COL.stroke
 
-  // Biegemoment (qualitativ)
-  const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
-  const relL = (xStange - xG1) / (xEnd - xG1)
-  const relR = (xGap2 - xG1) / (xEnd - xG1)
-  const profil = (t: number): number => {
-    const a = 2 * t - 1
-    if (einbaufall === 1) return 1 - a * a
-    if (einbaufall === 2) return -Math.cos(2 * Math.PI * t)
-    if (t < relL) return relL > 0 ? t / relL : 1
-    if (t > relR) return relR < 1 ? (1 - t) / (1 - relR) : 1
-    return 1
+  // Buchse als Band; Breite = tragende Buchsenlänge (max. Blechdicke), zentriert
+  const bushing = (xMitte: number, t: number, da: number | null, len: number | null, key: string) => {
+    if (!da) return null
+    const w = Math.min(len ?? t, t) * s
+    return <rect key={key} x={xMitte - w / 2} y={cy - (da * s) / 2} width={w} height={da * s} fill={COL.buchse} stroke={COL.buchseStroke} strokeWidth={1.2} />
   }
-  const N = 60
-  const momPts: string[] = []
-  for (let i = 0; i <= N; i++) {
-    const t = i / N
-    const x = xG1 + t * (xEnd - xG1)
-    momPts.push(`${(x).toFixed(1)},${(momBase + profil(t) * momAmp).toFixed(1)}`)
-  }
-
-  const bushing = (x: number, w: number, da: number | null, key: string) =>
-    da ? (
-      <rect key={key} x={x} y={cy - (da * s) / 2} width={w} height={da * s} fill={COL.buchse} stroke={COL.buchseStroke} strokeWidth={1.2} />
-    ) : null
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Vorderansicht mit Biegemoment">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Vorderansicht">
       <defs>
         <pattern id="hatchF" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="7" stroke={COL.stroke} strokeWidth="0.7" />
@@ -224,21 +197,7 @@ function Vorderansicht({ F, d, tS, tG, cS, cG, spalt, einbaufall, buchseStangeDa
       <Lasche x={xG2} w={gW} top={earsTopG} h={ehG} fill={earFill} stroke={earStroke} />
 
       {/* Stange */}
-      {!kugelB && <Lasche x={xStange} w={sW} top={earsTopS} h={ehS} fill={rodFill} stroke={rodStroke} />}
-      {kugelB &&
-        (() => {
-          const cxk = xStange + sW / 2
-          const rOut = Math.max(6, Math.min(sW, ehS) / 2 - 2)
-          const rBall = Math.max(4, rOut - 4)
-          return (
-            <g>
-              <rect x={xStange} y={earsTopS} width={sW} height={ehS} rx={Math.min(sW / 2, 8)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
-              <circle cx={cxk} cy={cy} r={rOut} fill={COL.ball} stroke={COL.ballDark} strokeWidth={1.3} />
-              <circle cx={cxk} cy={cy} r={rBall} fill="#eef2f7" stroke={COL.ballDark} strokeWidth={1.1} />
-              <circle cx={cxk - rBall * 0.3} cy={cy - rBall * 0.3} r={Math.max(rBall * 0.22, 2)} fill="#ffffff" opacity={0.7} stroke="none" />
-            </g>
-          )
-        })()}
+      <Lasche x={xStange} w={sW} top={earsTopS} h={ehS} fill={rodFill} stroke={rodStroke} />
       <rect x={xStange + sW / 2 - Math.max(sW * 0.32, 6)} y={cy + ehS / 2} width={Math.max(sW * 0.64, 12)} height={rodBottom - (cy + ehS / 2)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
       <g stroke={COL.kraft} strokeWidth={2.5} fill={COL.kraft}>
         <line x1={xStange + sW / 2} y1={rodBottom} x2={xStange + sW / 2} y2={fEndY} />
@@ -246,9 +205,9 @@ function Vorderansicht({ F, d, tS, tG, cS, cG, spalt, einbaufall, buchseStangeDa
         <text x={xStange + sW / 2 + 10} y={fEndY - 6} fontSize="14" fontWeight="700">F</text>
       </g>
 
-      {bushing(xG1, gW, buchseGabelDa, 'bg1')}
-      {bushing(xG2, gW, buchseGabelDa, 'bg2')}
-      {!kugelB && bushing(xStange, sW, buchseStangeDa, 'bs')}
+      {bushing(xG1 + gW / 2, tG, buchseGabelDa, buchseLenGabel, 'bg1')}
+      {bushing(xG2 + gW / 2, tG, buchseGabelDa, buchseLenGabel, 'bg2')}
+      {bushing(xStange + sW / 2, tS, buchseStangeDa, buchseLenStange, 'bs')}
 
       {/* Bolzen + Kopf + Splint */}
       <rect x={xG1 - 24} y={boltTop} width={xEnd - xG1 + 48} height={dp} rx={3} fill={COL.bolzen} opacity={0.92} stroke={COL.bolzenStroke} strokeWidth={1.5} />
@@ -276,22 +235,12 @@ function Vorderansicht({ F, d, tS, tG, cS, cG, spalt, einbaufall, buchseStangeDa
       <CDim x={xEnd + 22} refX={xG2 + gW} yMitte={cy} yKante={earsTopG} label={`c_G ${fmt(cG)}`} />
       <CDim x={xEnd + 52} refX={xGap2} yMitte={cy} yKante={earsTopS} label={`c_S ${fmt(cS)}`} />
 
-      {/* Biegemoment */}
-      <g>
-        <line x1={xG1} y1={momBase} x2={xEnd} y2={momBase} stroke={COL.stroke} strokeWidth={1} />
-        <polyline points={momPts.join(' ')} fill={COL.moment} fillOpacity={0.18} stroke={COL.moment} strokeWidth={1.6} />
-        <text x={(xG1 + xEnd) / 2} y={momLabelY} fontSize="11" textAnchor="middle" fill={COL.stroke}>
-          Biegemoment (qual.) · max M_b = {fmt(Mb)} N·mm
-        </text>
-      </g>
-
       {/* Legende */}
       <g fontSize="10.5" fill={COL.stroke}>
         <Legende x={xG1} y={legendY} color={COL.bolzen} label="Bolzen" />
         <Legende x={xG1 + 66} y={legendY} color={COL.gabel} label="Gabel" />
         <Legende x={xG1 + 128} y={legendY} color={COL.stange} label="Stange" />
         {(buchseGabelDa || buchseStangeDa) && <Legende x={xG1 + 196} y={legendY} color={COL.buchse} label="Buchse" />}
-        {kugelB && <Legende x={xG1 + 196} y={legendY} color={COL.ball} label="Kugelgelenk" />}
       </g>
     </svg>
   )

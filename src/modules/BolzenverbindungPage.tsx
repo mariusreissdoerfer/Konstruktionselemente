@@ -19,7 +19,6 @@ import {
   type AusreissModell,
   type BuchseConfig,
   type BuchseOrt,
-  type KugelgelenkConfig,
 } from '../calc/bolzen/bolzen'
 import { fmt } from '../calc/format'
 import type { Einbaufall, Lastfall } from '../calc/types'
@@ -98,14 +97,15 @@ export function BolzenverbindungPage() {
   const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S235JR')
   const [ausreissModell, setAusreissModell] = useLocalStorage<AusreissModell>('ke.bolzen.ausreiss', 'schub')
 
-  // Optionen
+  // Optionen – Buchsen
   const [buchseOn, setBuchseOn] = useLocalStorage('ke.bolzen.buchseOn', false)
-  const [buchseDa, setBuchseDa] = useLocalStorage('ke.bolzen.buchseDa', 30)
+  const [buchseDaS, setBuchseDaS] = useLocalStorage('ke.bolzen.buchseDaS', 30)
+  const [buchseDaG, setBuchseDaG] = useLocalStorage('ke.bolzen.buchseDaG', 28)
+  const [buchseLenGleichT, setBuchseLenGleichT] = useLocalStorage('ke.bolzen.buchseLenGleichT', true)
+  const [buchseLenS, setBuchseLenS] = useLocalStorage('ke.bolzen.buchseLenS', 20)
+  const [buchseLenG, setBuchseLenG] = useLocalStorage('ke.bolzen.buchseLenG', 12)
   const [buchseMatId, setBuchseMatId] = useLocalStorage('ke.bolzen.buchseMat', 'CuSn8')
   const [buchseOrt, setBuchseOrt] = useLocalStorage<BuchseOrt>('ke.bolzen.buchseOrt', 'beide')
-  const [kugelOn, setKugelOn] = useLocalStorage('ke.bolzen.kugelOn', false)
-  const [kugelB, setKugelB] = useLocalStorage('ke.bolzen.kugelB', 20)
-  const [kugelPzul, setKugelPzul] = useLocalStorage('ke.bolzen.kugelPzul', 150)
 
   // Das Auge muss den Bolzen umschließen: b ≥ d (+ Mindeststeg). Wächst d,
   // wandert die Augenkante mit nach außen (Lage), b kann nicht unter d fallen.
@@ -122,11 +122,19 @@ export function BolzenverbindungPage() {
   const material = MATERIAL_BY_ID.get(materialId) ?? MATERIALS[0]
   const buchseMat = MATERIAL_BY_ID.get(buchseMatId) ?? BUCHSEN_MATERIALS[0]
 
+  // Buchsenlänge wahlweise an Blechdicke gekoppelt
+  const lenS = buchseLenGleichT ? tS : buchseLenS
+  const lenG = buchseLenGleichT ? tG : buchseLenG
+
   const buchse: BuchseConfig | null = buchseOn
-    ? { da: buchseDa, material: buchseMat, ort: buchseOrt }
-    : null
-  const kugelgelenk: KugelgelenkConfig | null = kugelOn
-    ? { B: kugelB, pzul: kugelPzul }
+    ? {
+        daStange: buchseDaS,
+        daGabel: buchseDaG,
+        laengeStange: lenS,
+        laengeGabel: lenG,
+        material: buchseMat,
+        ort: buchseOrt,
+      }
     : null
 
   const gemeinsam = {
@@ -143,19 +151,18 @@ export function BolzenverbindungPage() {
     material,
     ausreissModell,
     buchse,
-    kugelgelenk,
   }
 
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, ausreissModell, buchse, kugelgelenk],
+    [F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, ausreissModell, buchse],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, ausreissModell, buchse, kugelgelenk],
+    [F, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, ausreissModell, buchse],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
@@ -269,7 +276,6 @@ export function BolzenverbindungPage() {
           <Toggle label="Buchsen einsetzen" checked={buchseOn} onChange={setBuchseOn} />
           {buchseOn && (
             <div className="space-y-3 border-l-2 border-amber-300 pl-3">
-              <NumberInput label="Außendurchmesser" symbol="d_a" unit="mm" value={buchseDa} onChange={setBuchseDa} min={d + 1} max={1500} step={1} />
               <SelectInput<BuchseOrt>
                 label="Einbauort"
                 value={buchseOrt}
@@ -280,6 +286,23 @@ export function BolzenverbindungPage() {
                   { value: 'gabel', label: 'nur Gabel' },
                 ]}
               />
+              {buchseOrt !== 'gabel' && (
+                <NumberInput label="Außen-⌀ Stange" symbol="d_a,S" unit="mm" value={buchseDaS} onChange={setBuchseDaS} min={d + 1} max={1500} step={1} />
+              )}
+              {buchseOrt !== 'stange' && (
+                <NumberInput label="Außen-⌀ Gabel" symbol="d_a,G" unit="mm" value={buchseDaG} onChange={setBuchseDaG} min={d + 1} max={1500} step={1} />
+              )}
+              <Toggle label="Buchsenlänge = Blechdicke" checked={buchseLenGleichT} onChange={setBuchseLenGleichT} />
+              {!buchseLenGleichT && (
+                <>
+                  {buchseOrt !== 'gabel' && (
+                    <NumberInput label="Buchsenlänge Stange" symbol="L_B,S" unit="mm" value={buchseLenS} onChange={setBuchseLenS} min={1} max={600} step={1} />
+                  )}
+                  {buchseOrt !== 'stange' && (
+                    <NumberInput label="Buchsenlänge Gabel" symbol="L_B,G" unit="mm" value={buchseLenG} onChange={setBuchseLenG} min={1} max={600} step={1} />
+                  )}
+                </>
+              )}
               <SelectInput<string>
                 label="Buchsenwerkstoff"
                 value={buchseMatId}
@@ -290,17 +313,6 @@ export function BolzenverbindungPage() {
                 }))}
                 hint={buchseMat.name}
               />
-            </div>
-          )}
-
-          <Toggle label="Kugelgelenk in Stange" checked={kugelOn} onChange={setKugelOn} />
-          {kugelOn && (
-            <div className="space-y-3 border-l-2 border-slate-400 pl-3">
-              <NumberInput label="Lagerbreite" symbol="B" unit="mm" value={kugelB} onChange={setKugelB} min={2} max={600} step={1} />
-              <NumberInput label="zul. Lagerpressung" symbol="p_zul" unit="N/mm²" value={kugelPzul} onChange={setKugelPzul} min={10} max={500} step={5} />
-              <p className="text-xs text-slate-400">
-                Spezifische Lagerbelastung ist herstellerabhängig (Datenblatt).
-              </p>
             </div>
           )}
         </div>
@@ -323,7 +335,6 @@ export function BolzenverbindungPage() {
       <section className="space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <BolzenDiagram
-            F={F}
             d={anzeigeD}
             tS={anzeigeTS}
             tG={anzeigeTG}
@@ -333,15 +344,10 @@ export function BolzenverbindungPage() {
             cG={anzeigeCG}
             spalt={spalt}
             einbaufall={einbaufall}
-            buchseStangeDa={
-              buchseOn && !kugelOn && (buchseOrt === 'beide' || buchseOrt === 'stange')
-                ? buchseDa
-                : null
-            }
-            buchseGabelDa={
-              buchseOn && (buchseOrt === 'beide' || buchseOrt === 'gabel') ? buchseDa : null
-            }
-            kugelB={kugelOn ? kugelB : null}
+            buchseStangeDa={buchseOn && buchseOrt !== 'gabel' ? buchseDaS : null}
+            buchseGabelDa={buchseOn && buchseOrt !== 'stange' ? buchseDaG : null}
+            buchseLenStange={buchseOn && buchseOrt !== 'gabel' ? lenS : null}
+            buchseLenGabel={buchseOn && buchseOrt !== 'stange' ? lenG : null}
           />
         </div>
 

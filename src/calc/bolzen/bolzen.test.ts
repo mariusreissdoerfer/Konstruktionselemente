@@ -206,36 +206,35 @@ describe('mindestMasse – Blechdicke & Breite', () => {
   })
 })
 
-describe('berechneBolzen – Buchse', () => {
-  it('liefert innen/außen Nachweise mit getrennten Werkstoffen', () => {
+describe('berechneBolzen – Buchse (getrennt Stange/Gabel, mit Länge)', () => {
+  it('innen über Buchsenlänge, außen über d_a und min(L_B, t)', () => {
     const r = berechneBolzen({
       ...base,
-      buchse: { da: 30, material: CuSn8 },
+      buchse: {
+        daStange: 30, daGabel: 28,
+        laengeStange: 16, laengeGabel: 12,
+        material: CuSn8, ort: 'beide',
+      },
     })
     const innen = r.nachweise.find((n) => n.name.includes('Stange innen'))!
     const aussen = r.nachweise.find((n) => n.name.includes('Stange außen'))!
-    // innen: F/(d·tS) = 50 ; zul = 0,25·Rm(CuSn8)
-    expect(innen.vorhanden).toBeCloseTo(50, 2)
+    // innen: F/(d·L_B) = 20000/(20·16) = 62,5 ; zul = 0,25·Rm(CuSn8)
+    expect(innen.vorhanden).toBeCloseTo(62.5, 2)
     expect(innen.zulaessig).toBeCloseTo(0.25 * CuSn8.Rm, 2)
-    // außen: F/(da·tS) = 20000/(30·20) = 33,33 ; zul = 0,25·Rm(S235)
-    expect(aussen.vorhanden).toBeCloseTo(33.33, 1)
+    // außen: F/(daS·min(16,20)) = 20000/(30·16) = 41,67 ; zul = 0,25·Rm(S235)
+    expect(aussen.vorhanden).toBeCloseTo(41.67, 1)
     expect(aussen.zulaessig).toBeCloseTo(0.25 * S235.Rm, 2)
-    // keine einfache "Flächenpressung Stange" mehr
     expect(r.nachweise.find((n) => n.name === 'Lochleibung Stange')).toBeUndefined()
   })
-})
 
-describe('berechneBolzen – Kugelgelenk', () => {
-  it('ersetzt die Stangenpressung durch Lagerpressung', () => {
+  it('Zug nutzt den jeweiligen Buchsen-Außendurchmesser', () => {
     const r = berechneBolzen({
       ...base,
-      kugelgelenk: { B: 16, pzul: 150 },
+      buchse: { daStange: 30, daGabel: 28, laengeStange: 20, laengeGabel: 12, material: CuSn8, ort: 'beide' },
     })
-    const lager = r.nachweise.find((n) => n.name.startsWith('Kugelgelenk'))!
-    // F/(d·B) = 20000/(20·16) = 62,5
-    expect(lager.vorhanden).toBeCloseTo(62.5, 2)
-    expect(lager.zulaessig).toBeCloseTo(150, 2)
-    expect(r.nachweise.find((n) => n.name === 'Lochleibung Stange')).toBeUndefined()
+    const zugS = r.nachweise.find((n) => n.name === 'Zug Stange')!
+    // F/((bS−daS)·tS) = 20000/((40−30)·20) = 100
+    expect(zugS.vorhanden).toBeCloseTo(100, 1)
   })
 })
 
@@ -269,7 +268,7 @@ describe('legeBolzenAus – vollständige Auslegung', () => {
   it('erfüllt alle Nachweise mit Buchse', () => {
     const r = legeBolzenAus({
       F: 40000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S235,
-      buchse: { da: 30, material: CuSn8, ort: 'beide' },
+      buchse: { daStange: 30, daGabel: 30, laengeStange: 20, laengeGabel: 12, material: CuSn8, ort: 'beide' },
     })
     expect(r.kontrolle.bestanden).toBe(true)
   })

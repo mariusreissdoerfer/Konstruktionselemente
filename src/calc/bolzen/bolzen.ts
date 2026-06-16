@@ -8,12 +8,11 @@
 //   ─────────────●══════════════════●─────────────   ← Bolzen, Durchmesser d
 //                       ▲ F  (Zugkraft der Stange)
 //
-// Optionen: Buchsen in den Bohrungen (Außendurchmesser d_a, eigener
-// Werkstoff) und ein Kugelgelenk/Gelenklager in der Stange.
+// Optionen: Buchsen in den Bohrungen (getrennter Außendurchmesser und Länge
+// für Stange und Gabel, eigener Werkstoff).
 //
-// Nachgewiesen werden: Flächenpressung (Lochleibung) in Stange und Gabel
-// (bzw. innen/außen bei Buchse, bzw. Lagerpressung bei Kugelgelenk),
-// Abscherung des Bolzens (zweischnittig) und Biegung des Bolzens.
+// Nachgewiesen werden: Lochleibung (Stange/Gabel, ggf. innen/außen bei Buchse),
+// Zug im Nettoquerschnitt, Ausreißen am Kopf, Abscherung und Biegung des Bolzens.
 
 import { fmt } from '../format'
 import type { Einbaufall, Lastfall, Material, Nachweis } from '../types'
@@ -66,22 +65,20 @@ export const EINBAUFALL_INFO: Record<
 /** Wo die Buchse(n) sitzen. */
 export type BuchseOrt = 'beide' | 'stange' | 'gabel'
 
-/** Optionale Buchse in den Bohrungen. */
+/** Optionale Buchse(n) in den Bohrungen – getrennt für Stange und Gabel. */
 export interface BuchseConfig {
-  /** Außendurchmesser der Buchse in mm */
-  da: number
+  /** Außendurchmesser der Buchse in der Stange in mm */
+  daStange: number
+  /** Außendurchmesser der Buchse in der Gabel in mm */
+  daGabel: number
+  /** Buchsenlänge in der Stange in mm (tragende Länge) */
+  laengeStange: number
+  /** Buchsenlänge in der Gabel je Lasche in mm */
+  laengeGabel: number
   /** Buchsenwerkstoff */
   material: Material
   /** Einbauort der Buchse(n); Standard: beide */
   ort?: BuchseOrt
-}
-
-/** Optionales Kugelgelenk / Gelenklager in der Stange. */
-export interface KugelgelenkConfig {
-  /** Lagerbreite B in mm (tragende Breite des Innenrings) */
-  B: number
-  /** zulässige spezifische Lagerbelastung in N/mm² (herstellerabhängig) */
-  pzul: number
 }
 
 export interface BolzenInput {
@@ -110,8 +107,6 @@ export interface BolzenInput {
   ausreissModell?: AusreissModell
   /** optionale Buchse */
   buchse?: BuchseConfig | null
-  /** optionales Kugelgelenk in der Stange */
-  kugelgelenk?: KugelgelenkConfig | null
   /** optionale Überschreibung der zulässigen-Faktoren (sonst aus Lastfall) */
   faktoren?: ZulFaktoren
 }
@@ -284,7 +279,6 @@ function ausreissNachweis(
 export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const { F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material } = input
   const buchse = input.buchse ?? null
-  const kugelgelenk = input.kugelgelenk ?? null
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[lastfall]
   const { cP, cSigma, cTau, cZug } = faktoren
 
@@ -299,34 +293,25 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const buchseStange = buchse && (ort === 'beide' || ort === 'stange')
   const buchseGabel = buchse && (ort === 'beide' || ort === 'gabel')
 
-  // ---- Flächenpressung Stange (bzw. Kugelgelenk) ----
-  if (kugelgelenk) {
-    const p = F / (d * kugelgelenk.B)
-    nachweise.push(
-      nachweis(
-        'Kugelgelenk – Lagerpressung',
-        'p = F / (d · B)',
-        `${fmt(F)} / (${fmt(d)} · ${fmt(kugelgelenk.B)})`,
-        p,
-        kugelgelenk.pzul,
-      ),
-    )
-  } else if (buchseStange && buchse) {
+  // ---- Lochleibung Stange (ggf. mit Buchse: innen/außen) ----
+  if (buchseStange && buchse) {
+    const lenS = buchse.laengeStange
+    const lenSa = Math.min(lenS, tS) // Überdeckung Buchse–Blech
     nachweise.push(
       nachweis(
         'Pressung Stange innen (Bolzen–Buchse)',
-        'p = F / (d · t_S)',
-        `${fmt(F)} / (${fmt(d)} · ${fmt(tS)})`,
-        F / (d * tS),
+        'p = F / (d · L_B)',
+        `${fmt(F)} / (${fmt(d)} · ${fmt(lenS)})`,
+        F / (d * lenS),
         pZulMat(buchse.material),
       ),
     )
     nachweise.push(
       nachweis(
         'Pressung Stange außen (Buchse–Stange)',
-        'p = F / (d_a · t_S)',
-        `${fmt(F)} / (${fmt(buchse.da)} · ${fmt(tS)})`,
-        F / (buchse.da * tS),
+        'p = F / (d_a · min(L_B, t_S))',
+        `${fmt(F)} / (${fmt(buchse.daStange)} · ${fmt(lenSa)})`,
+        F / (buchse.daStange * lenSa),
         pZulMat(material),
       ),
     )
@@ -342,23 +327,25 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
     )
   }
 
-  // ---- Flächenpressung Gabel ----
+  // ---- Lochleibung Gabel ----
   if (buchseGabel && buchse) {
+    const lenG = buchse.laengeGabel
+    const lenGa = Math.min(lenG, tG)
     nachweise.push(
       nachweis(
         'Pressung Gabel innen (Bolzen–Buchse)',
-        'p = F / (2 · d · t_G)',
-        `${fmt(F)} / (2 · ${fmt(d)} · ${fmt(tG)})`,
-        F / (2 * d * tG),
+        'p = F / (2 · d · L_B)',
+        `${fmt(F)} / (2 · ${fmt(d)} · ${fmt(lenG)})`,
+        F / (2 * d * lenG),
         pZulMat(buchse.material),
       ),
     )
     nachweise.push(
       nachweis(
         'Pressung Gabel außen (Buchse–Gabel)',
-        'p = F / (2 · d_a · t_G)',
-        `${fmt(F)} / (2 · ${fmt(buchse.da)} · ${fmt(tG)})`,
-        F / (2 * buchse.da * tG),
+        'p = F / (2 · d_a · min(L_B, t_G))',
+        `${fmt(F)} / (2 · ${fmt(buchse.daGabel)} · ${fmt(lenGa)})`,
+        F / (2 * buchse.daGabel * lenGa),
         pZulMat(material),
       ),
     )
@@ -375,9 +362,9 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   }
 
   // ---- Zug im Nettoquerschnitt (am Loch) ----
-  // wirksamer Lochdurchmesser: bei Buchse der Außendurchmesser
-  const dLochS = buchseStange && buchse ? buchse.da : d
-  const dLochG = buchseGabel && buchse ? buchse.da : d
+  // wirksamer Lochdurchmesser: bei Buchse der jeweilige Außendurchmesser
+  const dLochS = buchseStange && buchse ? buchse.daStange : d
+  const dLochG = buchseGabel && buchse ? buchse.daGabel : d
   const netS = Math.max(bS - dLochS, 0)
   const netG = Math.max(bG - dLochG, 0)
   const sigmaZZul = cZug * material.Rm
@@ -464,8 +451,8 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   const modell = input.ausreissModell ?? 'schub'
 
   const ort = buchse?.ort ?? 'beide'
-  const dLochS = buchse && (ort === 'beide' || ort === 'stange') ? buchse.da : d
-  const dLochG = buchse && (ort === 'beide' || ort === 'gabel') ? buchse.da : d
+  const dLochS = buchse && (ort === 'beide' || ort === 'stange') ? buchse.daStange : d
+  const dLochG = buchse && (ort === 'beide' || ort === 'gabel') ? buchse.daGabel : d
 
   const round = (x: number) => Math.round(x * 100) / 100
   return {
@@ -532,7 +519,6 @@ export function legeBolzenAus(
 ): AuslegungErgebnis {
   const { F, spalt, einbaufall, lastfall, material } = input
   const buchse = input.buchse ?? null
-  const kugelgelenk = input.kugelgelenk ?? null
   const fak = input.faktoren ?? ZUL_FAKTOREN[lastfall]
   const pZul = fak.cP * material.Rm
   const sigB = fak.cSigma * material.Rm
@@ -540,19 +526,18 @@ export function legeBolzenAus(
   const sigZ = fak.cZug * material.Rm
 
   const ort = buchse?.ort ?? 'beide'
-  const bStange = !!buchse && (ort === 'beide' || ort === 'stange') && !kugelgelenk
+  const bStange = !!buchse && (ort === 'beide' || ort === 'stange')
   const bGabel = !!buchse && (ort === 'beide' || ort === 'gabel')
 
-  // Lochleibung → erforderliche Dicken (Funktion von d)
+  // Lochleibung → erforderliche Dicken (Annahme: Buchsenlänge = Blechdicke)
   const tSmin = (d: number): number => {
-    if (kugelgelenk) return kugelgelenk.B // Augenstange = Lagerbreite
     if (bStange && buchse)
-      return Math.max(F / (d * fak.cP * buchse.material.Rm), F / (buchse.da * pZul))
+      return Math.max(F / (d * fak.cP * buchse.material.Rm), F / (buchse.daStange * pZul))
     return F / (d * pZul)
   }
   const tGmin = (d: number): number => {
     if (bGabel && buchse)
-      return Math.max(F / (2 * d * fak.cP * buchse.material.Rm), F / (2 * buchse.da * pZul))
+      return Math.max(F / (2 * d * fak.cP * buchse.material.Rm), F / (2 * buchse.daGabel * pZul))
     return F / (2 * d * pZul)
   }
 
@@ -579,8 +564,8 @@ export function legeBolzenAus(
   const dErf = Math.max(dAbscherung, dBiegungF)
 
   // Zug → erforderliche Breiten (mit finalen Dicken und d)
-  const dLochS = kugelgelenk ? d : bStange && buchse ? buchse.da : d
-  const dLochG = bGabel && buchse ? buchse.da : d
+  const dLochS = bStange && buchse ? buchse.daStange : d
+  const dLochG = bGabel && buchse ? buchse.daGabel : d
   const bS = Math.ceil(dLochS + F / (tS * sigZ))
   const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
 
