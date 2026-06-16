@@ -5,6 +5,7 @@ import type { Material } from './types'
 // Quelle: Roloff/Matek Maschinenelemente, Tabellenbuch (Werkstoffkennwerte).
 export const MATERIALS: Material[] = [
   { id: 'S235JR', kurz: 'S235JR', name: 'St 37 – Allgemeiner Baustahl', Re: 235, Rm: 360 },
+  { id: 'S355JR', kurz: 'S355JR', name: 'St 52 – Baustahl, höherfest', Re: 355, Rm: 510 },
   { id: 'E295', kurz: 'E295', name: 'St 50 – Unlegierter Baustahl', Re: 295, Rm: 490 },
   { id: 'E335', kurz: 'E335', name: 'St 60 – Unlegierter Baustahl', Re: 335, Rm: 590 },
   { id: 'C45', kurz: 'C45 (1.0503)', name: 'Vergütungsstahl, normalgeglüht', Re: 340, Rm: 620 },
