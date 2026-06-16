@@ -58,8 +58,6 @@ const COL = {
   gabel: '#94a3b8',
   stange: '#e2e8f0',
   stroke: '#475569',
-  fest: '#fcd34d',
-  festStroke: '#d97706',
   bolzen: '#0ea5e9',
   bolzenStroke: '#0369a1',
   buchse: '#fbbf24',
@@ -79,7 +77,7 @@ function useScale({ d, tS, tG, bS, bG, cS, cG, spalt, buchseStangeDa, buchseGabe
 }
 
 export function BolzenDiagram(props: BolzenDiagramProps) {
-  const { d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
+  const { d, tS, tG, bS, bG, cS, cG, spalt, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
   const v = props.versagen ?? {}
   const { s } = useScale(props)
 
@@ -112,12 +110,10 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const ehS = Math.max(2 * cS, d) * s // Augenhöhe Stange
   const hHalf = Math.max(ehG, ehS) / 2
 
-  const gabelFest = einbaufall === 2
-  const stangeFest = einbaufall === 3
-  const earFill = gabelFest ? COL.fest : COL.gabel
-  const earStroke = gabelFest ? COL.festStroke : COL.stroke
-  const rodFill = stangeFest ? COL.fest : COL.stange
-  const rodStroke = stangeFest ? COL.festStroke : COL.stroke
+  const earFill = COL.gabel
+  const earStroke = COL.stroke
+  const rodFill = COL.stange
+  const rodStroke = COL.stroke
 
   // ---------------- Seitenansicht (links) ----------------
   const wG = Math.max(bG, d) * s
