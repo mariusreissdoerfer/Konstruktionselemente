@@ -40,6 +40,6 @@ export interface Nachweis {
   sicherheit: number
   /** true, wenn vorhanden <= zulässig */
   erfuellt: boolean
-  /** Einheit der Werte (Default "N/mm²"); z. B. "mm" beim Eurocode-Nachweis */
+  /** Einheit der Werte (Default "N/mm²") */
   einheit?: string
 }

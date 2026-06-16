@@ -12,11 +12,9 @@ import {
 import {
   EINBAUFALL_INFO,
   LASTFALL_LABEL,
-  AUSREISS_LABEL,
   berechneBolzen,
   legeBolzenAus,
   mindestMasse,
-  type AusreissModell,
   type BuchseConfig,
   type BuchseOrt,
 } from '../calc/bolzen/bolzen'
@@ -95,7 +93,6 @@ export function BolzenverbindungPage() {
   const [einbaufall, setEinbaufall] = useLocalStorage<Einbaufall>('ke.bolzen.einbaufall', 1)
   const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
   const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S235JR')
-  const [ausreissModell, setAusreissModell] = useLocalStorage<AusreissModell>('ke.bolzen.ausreiss', 'schub')
 
   // Optionen – Buchsen
   const [buchseOn, setBuchseOn] = useLocalStorage('ke.bolzen.buchseOn', false)
@@ -149,20 +146,19 @@ export function BolzenverbindungPage() {
     einbaufall,
     lastfall,
     material,
-    ausreissModell,
     buchse,
   }
 
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, ausreissModell, buchse],
+    [F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, ausreissModell, buchse],
+    [F, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
@@ -184,8 +180,8 @@ export function BolzenverbindungPage() {
     lochGabel: fail((n) => n.includes('Lochleibung Gabel') || n.includes('Gabel innen') || n.includes('Gabel außen')),
     zugStange: fail((n) => n === 'Zug Stange'),
     zugGabel: fail((n) => n === 'Zug Gabel'),
-    ausreissStange: fail((n) => n.startsWith('Stange –')),
-    ausreissGabel: fail((n) => n.startsWith('Gabel –')),
+    ausreissStange: fail((n) => n === 'Ausreißen Stange'),
+    ausreissGabel: fail((n) => n === 'Ausreißen Gabel'),
     abscherung: fail((n) => n.startsWith('Abscherung')),
     biegung: fail((n) => n === 'Biegung'),
   }
@@ -270,23 +266,6 @@ export function BolzenverbindungPage() {
             label: LASTFALL_LABEL[l],
           }))}
           hint={`zul.: p=${ergebnis.faktoren.cP}·Rₘ, σ=${ergebnis.faktoren.cSigma}·Rₘ, τ=${ergebnis.faktoren.cTau}·Rₘ`}
-        />
-
-        <SelectInput<AusreissModell>
-          label="Ausreiß-/Kopfmodell"
-          value={ausreissModell}
-          onChange={setAusreissModell}
-          options={(['schub', 'kopfzug', 'eurocode'] as AusreissModell[]).map((m) => ({
-            value: m,
-            label: AUSREISS_LABEL[m],
-          }))}
-          hint={
-            ausreissModell === 'schub'
-              ? 'τ = F/(2·(c−d/2)·t) ≤ τ_zul'
-              : ausreissModell === 'kopfzug'
-                ? 'σ = F/(2·(c−d/2)·t) ≤ σ_z,zul'
-                : 'a_erf = F/(2·t·f_y)+⅔·d ≤ c−d/2 (in mm)'
-          }
         />
 
         <SelectInput<string>
@@ -408,6 +387,11 @@ export function BolzenverbindungPage() {
               <AusMass label="Rand c_S" wert={auslegung.cS} />
               <AusMass label="Rand c_G" wert={auslegung.cG} />
             </div>
+            <p className="mt-2 text-xs text-slate-500">
+              R/M-Richtwert Augenstab: Stegbreite (b−d)/2 ≈ 0,75·d → b ≈ {fmt(Math.round(2.5 * auslegung.d))} mm,
+              Kopfhöhe c ≈ 1,1·d → c ≈ {fmt(Math.round(1.1 * auslegung.d))} mm. Maßgebend bleibt der größere
+              Wert aus Festigkeit und Richtwert.
+            </p>
           </div>
         )}
 
