@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useLocalStorage } from '../hooks/useLocalStorage'
 import { NumberInput } from '../components/NumberInput'
 import { SelectInput } from '../components/SelectInput'
 import { ResultCard } from '../components/ResultCard'
@@ -78,26 +79,28 @@ function MindMass({ label, wert, ist }: { label: string; wert: number; ist: numb
 }
 
 export function BolzenverbindungPage() {
-  const [modus, setModus] = useState<Modus>('nachweis')
-  const [F, setF] = useState(20000)
-  const [d, setD] = useState(20)
-  const [tS, setTS] = useState(20)
-  const [tG, setTG] = useState(12)
-  const [bS, setBS] = useState(40)
-  const [bG, setBG] = useState(40)
-  const [spalt, setSpalt] = useState(0)
-  const [einbaufall, setEinbaufall] = useState<Einbaufall>(1)
-  const [lastfall, setLastfall] = useState<Lastfall>('schwellend')
-  const [materialId, setMaterialId] = useState('S235JR')
+  // Eingaben werden im Browser (localStorage) gespeichert und beim erneuten
+  // Laden wiederhergestellt.
+  const [modus, setModus] = useLocalStorage<Modus>('ke.bolzen.modus', 'nachweis')
+  const [F, setF] = useLocalStorage('ke.bolzen.F', 20000)
+  const [d, setD] = useLocalStorage('ke.bolzen.d', 20)
+  const [tS, setTS] = useLocalStorage('ke.bolzen.tS', 20)
+  const [tG, setTG] = useLocalStorage('ke.bolzen.tG', 12)
+  const [bS, setBS] = useLocalStorage('ke.bolzen.bS', 40)
+  const [bG, setBG] = useLocalStorage('ke.bolzen.bG', 40)
+  const [spalt, setSpalt] = useLocalStorage('ke.bolzen.spalt', 0)
+  const [einbaufall, setEinbaufall] = useLocalStorage<Einbaufall>('ke.bolzen.einbaufall', 1)
+  const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
+  const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S235JR')
 
   // Optionen
-  const [buchseOn, setBuchseOn] = useState(false)
-  const [buchseDa, setBuchseDa] = useState(30)
-  const [buchseMatId, setBuchseMatId] = useState('CuSn8')
-  const [buchseOrt, setBuchseOrt] = useState<BuchseOrt>('beide')
-  const [kugelOn, setKugelOn] = useState(false)
-  const [kugelB, setKugelB] = useState(20)
-  const [kugelPzul, setKugelPzul] = useState(150)
+  const [buchseOn, setBuchseOn] = useLocalStorage('ke.bolzen.buchseOn', false)
+  const [buchseDa, setBuchseDa] = useLocalStorage('ke.bolzen.buchseDa', 30)
+  const [buchseMatId, setBuchseMatId] = useLocalStorage('ke.bolzen.buchseMat', 'CuSn8')
+  const [buchseOrt, setBuchseOrt] = useLocalStorage<BuchseOrt>('ke.bolzen.buchseOrt', 'beide')
+  const [kugelOn, setKugelOn] = useLocalStorage('ke.bolzen.kugelOn', false)
+  const [kugelB, setKugelB] = useLocalStorage('ke.bolzen.kugelB', 20)
+  const [kugelPzul, setKugelPzul] = useLocalStorage('ke.bolzen.kugelPzul', 150)
 
   const material = MATERIAL_BY_ID.get(materialId) ?? MATERIALS[0]
   const buchseMat = MATERIAL_BY_ID.get(buchseMatId) ?? BUCHSEN_MATERIALS[0]
@@ -260,6 +263,19 @@ export function BolzenverbindungPage() {
             </div>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            Object.keys(localStorage)
+              .filter((k) => k.startsWith('ke.bolzen.'))
+              .forEach((k) => localStorage.removeItem(k))
+            location.reload()
+          }}
+          className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+        >
+          Eingaben zurücksetzen
+        </button>
       </aside>
 
       {/* Diagramm + Ergebnisse */}
