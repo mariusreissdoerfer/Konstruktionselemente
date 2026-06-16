@@ -390,48 +390,99 @@ export const NORM_DURCHMESSER = [
 ]
 
 export interface AuslegungErgebnis {
-  /** rechnerisch erforderlicher Mindestdurchmesser in mm */
+  /** gewählter genormter Bolzendurchmesser in mm */
+  d: number
+  /** erforderliche Stangendicke in mm */
+  tS: number
+  /** erforderliche Gabeldicke (je Lasche) in mm */
+  tG: number
+  /** erforderliche Stangenbreite in mm */
+  bS: number
+  /** erforderliche Gabelbreite (je Lasche) in mm */
+  bG: number
+  /** rechnerisch erforderlicher Mindestdurchmesser (vor Normung) in mm */
   dErf: number
-  /** nächstgrößerer genormter Durchmesser in mm */
-  dGewaehlt: number
-  /** maßgebender Nachweis ("Abscherung" oder "Biegung") */
+  /** für den Durchmesser maßgebender Nachweis ("Abscherung" oder "Biegung") */
   massgebend: string
-  /** Nachweis-Ergebnis mit dem gewählten Durchmesser */
+  /** Kontrolle mit den ausgelegten Maßen (sollte alle Nachweise erfüllen) */
   kontrolle: BolzenErgebnis
 }
 
+function naechsterNorm(d: number): number {
+  return (
+    NORM_DURCHMESSER.find((x) => x >= d) ??
+    NORM_DURCHMESSER[NORM_DURCHMESSER.length - 1]
+  )
+}
+
 /**
- * Auslegung: kleinster Bolzendurchmesser, der Abscherung und Biegung erfüllt.
- * (Flächenpressung hängt von t_S/t_G ab und wird über die Kontrolle geprüft.)
+ * Vollständige Auslegung: bestimmt d, t_S, t_G, b_S, b_G so, dass ALLE
+ * Nachweise erfüllt sind (jeweils das erforderliche Minimum):
+ *  - Lochleibung → Dicken t_S, t_G
+ *  - Zug         → Breiten b_S, b_G
+ *  - Abscherung + Biegung → Durchmesser d (genormt)
+ * d, t und b hängen voneinander ab (Biegung über t, Lochleibung über d),
+ * daher wird iteriert. Dicken/Breiten werden auf ganze mm aufgerundet.
  */
 export function legeBolzenAus(
-  input: Omit<BolzenInput, 'd'>,
+  input: Omit<BolzenInput, 'd' | 'tS' | 'tG' | 'bS' | 'bG'> &
+    Partial<Pick<BolzenInput, 'tS' | 'tG' | 'bS' | 'bG'>>,
 ): AuslegungErgebnis {
-  const { F, tS, tG, spalt, einbaufall, lastfall, material } = input
-  const faktoren = input.faktoren ?? ZUL_FAKTOREN[lastfall]
-  const tauZul = faktoren.cTau * material.Rm
-  const sigmaZul = faktoren.cSigma * material.Rm
+  const { F, spalt, einbaufall, lastfall, material } = input
+  const buchse = input.buchse ?? null
+  const kugelgelenk = input.kugelgelenk ?? null
+  const fak = input.faktoren ?? ZUL_FAKTOREN[lastfall]
+  const pZul = fak.cP * material.Rm
+  const sigB = fak.cSigma * material.Rm
+  const tauZul = fak.cTau * material.Rm
+  const sigZ = fak.cZug * material.Rm
 
-  // Abscherung: τ = F/(2·π·d²/4) ≤ τ_zul  →  d ≥ sqrt(2·F/(π·τ_zul))
+  const ort = buchse?.ort ?? 'beide'
+  const bStange = !!buchse && (ort === 'beide' || ort === 'stange') && !kugelgelenk
+  const bGabel = !!buchse && (ort === 'beide' || ort === 'gabel')
+
+  // Lochleibung → erforderliche Dicken (Funktion von d)
+  const tSmin = (d: number): number => {
+    if (kugelgelenk) return kugelgelenk.B // Augenstange = Lagerbreite
+    if (bStange && buchse)
+      return Math.max(F / (d * fak.cP * buchse.material.Rm), F / (buchse.da * pZul))
+    return F / (d * pZul)
+  }
+  const tGmin = (d: number): number => {
+    if (bGabel && buchse)
+      return Math.max(F / (2 * d * fak.cP * buchse.material.Rm), F / (2 * buchse.da * pZul))
+    return F / (2 * d * pZul)
+  }
+
   const dAbscherung = Math.sqrt((2 * F) / (Math.PI * tauZul))
 
-  // Biegung: σ = M_b/(π·d³/32) ≤ σ_zul  →  d ≥ (32·M_b/(π·σ_zul))^(1/3)
-  const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
-  const dBiegung = Math.cbrt((32 * Mb) / (Math.PI * sigmaZul))
-
-  const massgebend = dBiegung >= dAbscherung ? 'Biegung' : 'Abscherung'
-  const dErf = Math.max(dAbscherung, dBiegung)
-
-  const dGewaehlt =
-    NORM_DURCHMESSER.find((d) => d >= dErf) ??
-    NORM_DURCHMESSER[NORM_DURCHMESSER.length - 1]
-
-  const kontrolle = berechneBolzen({ ...input, d: dGewaehlt })
-
-  return {
-    dErf: round(dErf, 2),
-    dGewaehlt,
-    massgebend,
-    kontrolle,
+  // iterativ konsistente Dicken und Durchmesser
+  let d = naechsterNorm(dAbscherung)
+  let tS = 1
+  let tG = 1
+  for (let k = 0; k < 25; k++) {
+    tS = Math.ceil(tSmin(d))
+    tG = Math.ceil(tGmin(d))
+    const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
+    const dBiegung = Math.cbrt((32 * Mb) / (Math.PI * sigB))
+    const dNorm = naechsterNorm(Math.max(dAbscherung, dBiegung))
+    if (dNorm <= d) break
+    d = dNorm
   }
+
+  // maßgebender Nachweis für d (mit finalen Dicken)
+  const MbF = biegemoment(F, tS, tG, spalt, einbaufall)
+  const dBiegungF = Math.cbrt((32 * MbF) / (Math.PI * sigB))
+  const massgebend = dBiegungF >= dAbscherung ? 'Biegung' : 'Abscherung'
+  const dErf = Math.max(dAbscherung, dBiegungF)
+
+  // Zug → erforderliche Breiten (mit finalen Dicken und d)
+  const dLochS = kugelgelenk ? d : bStange && buchse ? buchse.da : d
+  const dLochG = bGabel && buchse ? buchse.da : d
+  const bS = Math.ceil(dLochS + F / (tS * sigZ))
+  const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
+
+  const kontrolle = berechneBolzen({ ...input, d, tS, tG, bS, bG })
+
+  return { d, tS, tG, bS, bG, dErf: round(dErf, 2), massgebend, kontrolle }
 }

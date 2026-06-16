@@ -191,31 +191,39 @@ describe('berechneBolzen – Kugelgelenk', () => {
   })
 })
 
-describe('legeBolzenAus – Auslegung', () => {
-  it('liefert genormten Durchmesser, der den Nachweis besteht', () => {
+describe('legeBolzenAus – vollständige Auslegung', () => {
+  it('alle Nachweise erfüllt (genormter d, aufgerundete t/b)', () => {
     const r = legeBolzenAus({
-      F: 20000,
-      tS: 20,
-      tG: 12,
-      bS: 40,
-      bG: 40,
-      spalt: 0,
-      einbaufall: 1,
-      lastfall: 'schwellend',
-      material: S235,
+      F: 20000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S235,
     })
-    expect(r.dGewaehlt).toBeGreaterThanOrEqual(r.dErf)
+    expect(r.d).toBeGreaterThanOrEqual(r.dErf)
+    expect(r.tS).toBeGreaterThan(0)
+    expect(r.bS).toBeGreaterThan(r.d)
+    expect(r.bG).toBeGreaterThan(r.d)
+    expect(r.kontrolle.bestanden).toBe(true)
+  })
+
+  it('erfüllt alle Nachweise auch bei großer Kraft', () => {
+    const r = legeBolzenAus({
+      F: 120000, spalt: 8, einbaufall: 1, lastfall: 'wechselnd', material: S235,
+    })
+    expect(r.kontrolle.bestanden).toBe(true)
+  })
+
+  it('erfüllt alle Nachweise mit Buchse', () => {
+    const r = legeBolzenAus({
+      F: 40000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S235,
+      buchse: { da: 30, material: CuSn8, ort: 'beide' },
+    })
     expect(r.kontrolle.bestanden).toBe(true)
   })
 
   it('Spalt erhöht den erforderlichen Durchmesser', () => {
     const ohne = legeBolzenAus({
-      F: 20000, tS: 20, tG: 12, bS: 40, bG: 40, spalt: 0,
-      einbaufall: 1, lastfall: 'schwellend', material: S235,
+      F: 20000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S235,
     })
     const mit = legeBolzenAus({
-      F: 20000, tS: 20, tG: 12, bS: 40, bG: 40, spalt: 10,
-      einbaufall: 1, lastfall: 'schwellend', material: S235,
+      F: 20000, spalt: 10, einbaufall: 1, lastfall: 'schwellend', material: S235,
     })
     expect(mit.dErf).toBeGreaterThan(ohne.dErf)
   })

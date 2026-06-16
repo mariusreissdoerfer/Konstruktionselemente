@@ -53,6 +53,17 @@ function Toggle({
   )
 }
 
+function AusMass({ label, wert, stark }: { label: string; wert: number; stark?: boolean }) {
+  return (
+    <div className="rounded-lg bg-white/70 px-2 py-1.5 ring-1 ring-sky-100">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={`tabular-nums ${stark ? 'text-lg font-bold text-sky-700' : 'text-sm font-semibold text-slate-800'}`}>
+        {fmt(wert)} mm
+      </div>
+    </div>
+  )
+}
+
 function MindMass({ label, wert, ist }: { label: string; wert: number; ist: number }) {
   const ok = ist >= wert
   return (
@@ -125,7 +136,12 @@ export function BolzenverbindungPage() {
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
-  const anzeigeD = modus === 'nachweis' ? d : auslegung.dGewaehlt
+  const aus = modus === 'auslegung'
+  const anzeigeD = aus ? auslegung.d : d
+  const anzeigeTS = aus ? auslegung.tS : tS
+  const anzeigeTG = aus ? auslegung.tG : tG
+  const anzeigeBS = aus ? auslegung.bS : bS
+  const anzeigeBG = aus ? auslegung.bG : bG
   const mindest = mindestMasse({ ...gemeinsam, d: anzeigeD })
 
   return (
@@ -157,10 +173,14 @@ export function BolzenverbindungPage() {
           <NumberInput label="Bolzendurchmesser" symbol="d" unit="mm" value={d} onChange={setD} min={3} max={100} step={1} />
         )}
 
-        <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={120} step={1} />
-        <NumberInput label="Gabeldicke (je Lasche)" symbol="t_G" unit="mm" value={tG} onChange={setTG} min={2} max={120} step={1} />
-        <NumberInput label="Stangenbreite (Auge)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={300} step={1} />
-        <NumberInput label="Gabelbreite (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={300} step={1} />
+        {modus === 'nachweis' && (
+          <>
+            <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={120} step={1} />
+            <NumberInput label="Gabeldicke (je Lasche)" symbol="t_G" unit="mm" value={tG} onChange={setTG} min={2} max={120} step={1} />
+            <NumberInput label="Stangenbreite (Auge)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={300} step={1} />
+            <NumberInput label="Gabelbreite (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={300} step={1} />
+          </>
+        )}
         <NumberInput label="Spalt zw. Blechen" symbol="a" unit="mm" value={spalt} onChange={setSpalt} min={0} max={50} step={0.5} />
 
         <SelectInput<Einbaufall>
@@ -248,10 +268,10 @@ export function BolzenverbindungPage() {
           <BolzenDiagram
             F={F}
             d={anzeigeD}
-            tS={tS}
-            tG={tG}
-            bS={bS}
-            bG={bG}
+            tS={anzeigeTS}
+            tG={anzeigeTG}
+            bS={anzeigeBS}
+            bG={anzeigeBG}
             spalt={spalt}
             einbaufall={einbaufall}
             buchseStangeDa={
@@ -266,38 +286,43 @@ export function BolzenverbindungPage() {
           />
         </div>
 
-        {modus === 'auslegung' && (
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm">
-            <div>
-              <span className="text-slate-500">erforderlich </span>
-              <span className="font-semibold text-slate-800">d ≥ {fmt(auslegung.dErf)} mm</span>
+        {aus && (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+            <div className="mb-2 flex items-baseline justify-between">
+              <h3 className="text-sm font-semibold text-slate-800">
+                Ausgelegte Geometrie (erfüllt alle Nachweise)
+              </h3>
+              <span className="text-xs text-slate-500">
+                d maßgebend: {auslegung.massgebend} · d ≥ {fmt(auslegung.dErf)} mm
+              </span>
             </div>
-            <div>
-              <span className="text-slate-500">gewählt (genormt) </span>
-              <span className="text-lg font-bold text-sky-700">d = {fmt(auslegung.dGewaehlt)} mm</span>
-            </div>
-            <div>
-              <span className="text-slate-500">maßgebend: </span>
-              <span className="font-semibold text-slate-800">{auslegung.massgebend}</span>
+            <div className="grid grid-cols-3 gap-2 text-sm sm:grid-cols-5">
+              <AusMass label="Bolzen ⌀d" wert={auslegung.d} stark />
+              <AusMass label="Stangendicke t_S" wert={auslegung.tS} />
+              <AusMass label="Gabeldicke t_G" wert={auslegung.tG} />
+              <AusMass label="Stangenbreite b_S" wert={auslegung.bS} />
+              <AusMass label="Gabelbreite b_G" wert={auslegung.bG} />
             </div>
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-2 text-sm font-semibold text-slate-800">
-            Erforderliche Mindestmaße (aus Lochleibung &amp; Zug)
-          </h3>
-          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-            <MindMass label="Stangendicke t_S" wert={mindest.tSmin} ist={tS} />
-            <MindMass label="Gabeldicke t_G" wert={mindest.tGmin} ist={tG} />
-            <MindMass label="Stangenbreite b_S" wert={mindest.bSmin} ist={bS} />
-            <MindMass label="Gabelbreite b_G" wert={mindest.bGmin} ist={bG} />
+        {!aus && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-sm font-semibold text-slate-800">
+              Erforderliche Mindestmaße (aus Lochleibung &amp; Zug)
+            </h3>
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <MindMass label="Stangendicke t_S" wert={mindest.tSmin} ist={tS} />
+              <MindMass label="Gabeldicke t_G" wert={mindest.tGmin} ist={tG} />
+              <MindMass label="Stangenbreite b_S" wert={mindest.bSmin} ist={bS} />
+              <MindMass label="Gabelbreite b_G" wert={mindest.bGmin} ist={bG} />
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Dicke aus Lochleibung (für ⌀{fmt(anzeigeD)} mm), Breite aus Zug (mit
+              aktueller Dicke). Werte ≥ Mindestmaß wählen.
+            </p>
           </div>
-          <p className="mt-2 text-xs text-slate-400">
-            Dicke aus Lochleibung (für ⌀{fmt(anzeigeD)} mm), Breite aus Zug (mit
-            aktueller Dicke). Werte ≥ Mindestmaß wählen.
-          </p>
-        </div>
+        )}
 
         <div>
           <div className="mb-3 flex items-center justify-between">
