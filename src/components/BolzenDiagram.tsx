@@ -195,7 +195,9 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
 
       {/* Titel */}
       <text x={sideCx} y={14} fontSize="11" textAnchor="middle" fill={COL.stroke}>Seitenansicht</text>
-      <text x={(xG1 + xEnd) / 2} y={14} fontSize="11" textAnchor="middle" fill={COL.stroke}>Vorderansicht</text>
+      <text x={(xG1 + xEnd) / 2} y={14} fontSize="11" textAnchor="middle" fill={COL.stroke}>
+        {knie ? 'Vorderansicht – F ⊗ wirkt 90° quer zur Ansicht' : 'Vorderansicht'}
+      </text>
 
       {/* gemeinsame Bolzenachse (Hilfslinie) */}
       <line x1={6} y1={cy} x2={W - 6} y2={cy} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 4" />
@@ -282,11 +284,21 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
 
         <Lasche x={xStange} w={sW} top={earsTopS} h={ehS} fill={rodFill} stroke={rodStroke} />
         <rect x={xStange + sW / 2 - Math.max(sW * 0.32, 6)} y={cy + ehS / 2} width={Math.max(sW * 0.64, 12)} height={rodBottomF - (cy + ehS / 2)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
-        <g stroke={COL.kraft} strokeWidth={2.5} fill={COL.kraft}>
-          <line x1={xStange + sW / 2} y1={rodBottomF} x2={xStange + sW / 2} y2={fEndYF} />
-          <polygon points={`${xStange + sW / 2 - 6},${fEndYF - 8} ${xStange + sW / 2 + 6},${fEndYF - 8} ${xStange + sW / 2},${fEndYF + 2}`} />
-          <text x={xStange + sW / 2 + 10} y={fEndYF - 6} fontSize="14" fontWeight="700">F</text>
-        </g>
+        {/* Kraft F – gerade: Pfeil nach unten · Knie: senkrecht zur Bildebene (⊗) */}
+        {knie ? (
+          <g stroke={COL.kraft} strokeWidth={2} fill="none">
+            <circle cx={xStange + sW / 2} cy={fEndYF - 4} r={9} fill="white" />
+            <line x1={xStange + sW / 2 - 6} y1={fEndYF - 10} x2={xStange + sW / 2 + 6} y2={fEndYF + 2} />
+            <line x1={xStange + sW / 2 - 6} y1={fEndYF + 2} x2={xStange + sW / 2 + 6} y2={fEndYF - 10} />
+            <text x={xStange + sW / 2 + 15} y={fEndYF} fontSize="14" fontWeight="700" stroke="none" fill={COL.kraft}>F</text>
+          </g>
+        ) : (
+          <g stroke={COL.kraft} strokeWidth={2.5} fill={COL.kraft}>
+            <line x1={xStange + sW / 2} y1={rodBottomF} x2={xStange + sW / 2} y2={fEndYF} />
+            <polygon points={`${xStange + sW / 2 - 6},${fEndYF - 8} ${xStange + sW / 2 + 6},${fEndYF - 8} ${xStange + sW / 2},${fEndYF + 2}`} />
+            <text x={xStange + sW / 2 + 10} y={fEndYF - 6} fontSize="14" fontWeight="700">F</text>
+          </g>
+        )}
 
         {bushingF(xG1 + gW / 2, tG, buchseGabelDa, buchseLenGabel, 'bg1')}
         {bushingF(xG2 + gW / 2, tG, buchseGabelDa, buchseLenGabel, 'bg2')}
