@@ -31,6 +31,8 @@ export interface BolzenDiagramProps {
   cG: number
   spalt: number
   einbaufall: Einbaufall
+  /** 90°-Knie: Stange steht im rechten Winkel zur Gabel */
+  knie?: boolean
   buchseStangeDa: number | null
   buchseGabelDa: number | null
   buchseLenStange: number | null
@@ -77,7 +79,7 @@ function useScale({ d, tS, tG, bS, bG, cS, cG, spalt, buchseStangeDa, buchseGabe
 }
 
 export function BolzenDiagram(props: BolzenDiagramProps) {
-  const { d, tS, tG, bS, bG, cS, cG, spalt, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
+  const { d, tS, tG, bS, bG, cS, cG, spalt, knie = false, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
   const v = props.versagen ?? {}
   const { s } = useScale(props)
 
@@ -107,8 +109,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
 
   const dp = d * s
   const ehG = Math.max(2 * cG, d) * s // Augenhöhe Gabel
-  const ehS = Math.max(2 * cS, d) * s // Augenhöhe Stange
-  const hHalf = Math.max(ehG, ehS) / 2
+  const ehS = Math.max(2 * cS, d) * s // Augenhöhe Stange (in Kraftrichtung)
 
   const earFill = COL.gabel
   const earStroke = COL.stroke
@@ -118,12 +119,20 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   // ---------------- Seitenansicht (links) ----------------
   const wG = Math.max(bG, d) * s
   const wS = Math.max(bS, d) * s
-  const wOuter = Math.max(wG, wS)
-  const sideLeft = 30
+  // 90°-Knie: die Stange steht quer → ihr Auge ist um 90° gedreht
+  const sEyeW = knie ? ehS : wS // horizontale Augenbreite der Stange
+  const sEyeH = knie ? wS : ehS // vertikale Augenhöhe der Stange
+  const hHalf = Math.max(ehG, sEyeH) / 2
+  const wOuter = Math.max(wG, sEyeW)
+  const sideLeft = knie ? 78 : 30 // links Platz für c_G/b_S-Maße beim Knie
   const sideCRight = 96 // Platz rechts für die c-Maße
-  const sideW = sideLeft + wOuter + sideCRight
+  const stemThk = Math.max(Math.min(wG, wS) * 0.6, 8) // Dicke des Stangenstiels
   const sideCx = sideLeft + wOuter / 2
   const rp = dp / 2
+  // Stange läuft beim Knie nach rechts: Stiel + Kraftpfeil
+  const stStemEndX = sideCx + sEyeW / 2 + 34
+  const stForceEndX = stStemEndX + 30
+  const sideW = knie ? stForceEndX + 34 : sideLeft + wOuter + sideCRight
 
   // ---------------- Vorderansicht (rechts) ----------------
   const gW = tG * s
@@ -194,26 +203,73 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
       {/* ===================== Seitenansicht ===================== */}
       <g>
         <Ground x={sideCx - 30} y={cy - hHalf - 50} w={60} />
-        {/* Gabel: Stiel + Auge (hinten) */}
-        <rect x={sideCx - Math.min(wG, wS) * 0.3} y={cy - hHalf - 50} width={Math.min(wG, wS) * 0.6} height={hHalf + 50} fill={earFill} stroke={earStroke} strokeWidth={1.5} />
+        {/* Gabel: Stiel nach oben + Auge */}
+        <rect x={sideCx - stemThk / 2} y={cy - hHalf - 50} width={stemThk} height={hHalf + 50} fill={earFill} stroke={earStroke} strokeWidth={1.5} />
         <rect x={sideCx - wG / 2} y={cy - ehG / 2} width={wG} height={ehG} rx={Math.min(wG, ehG) / 2} fill={earFill} stroke={earStroke} strokeWidth={1.5} />
-        {/* Stange: Auge (vorne) + Stiel nach unten */}
-        <rect x={sideCx - Math.min(wG, wS) * 0.3} y={cy} width={Math.min(wG, wS) * 0.6} height={sideShaftBottom - cy} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
-        <rect x={sideCx - wS / 2} y={cy - ehS / 2} width={wS} height={ehS} rx={Math.min(wS, ehS) / 2} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+
+        {/* Stange: Auge + Stiel (gerade: nach unten · Knie: nach rechts) */}
+        {knie ? (
+          <>
+            <rect x={sideCx} y={cy - stemThk / 2} width={stStemEndX - sideCx} height={stemThk} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+            <rect x={sideCx - sEyeW / 2} y={cy - sEyeH / 2} width={sEyeW} height={sEyeH} rx={Math.min(sEyeW, sEyeH) / 2} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+          </>
+        ) : (
+          <>
+            <rect x={sideCx - stemThk / 2} y={cy} width={stemThk} height={sideShaftBottom - cy} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+            <rect x={sideCx - wS / 2} y={cy - ehS / 2} width={wS} height={ehS} rx={Math.min(wS, ehS) / 2} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+          </>
+        )}
+
         {rb > 0 && <circle cx={sideCx} cy={cy} r={rb} fill={COL.buchse} stroke={COL.buchseStroke} strokeWidth={1.2} />}
         <circle cx={sideCx} cy={cy} r={rp} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.5} />
-        {/* Kraft F */}
-        <g stroke={COL.kraft} strokeWidth={2.5} fill={COL.kraft}>
-          <line x1={sideCx} y1={sideShaftBottom} x2={sideCx} y2={sideFEnd} />
-          <polygon points={`${sideCx - 6},${sideFEnd - 8} ${sideCx + 6},${sideFEnd - 8} ${sideCx},${sideFEnd + 2}`} />
-          <text x={sideCx + 11} y={sideFEnd - 6} fontSize="14" fontWeight="700">F</text>
-        </g>
-        {/* Steg-Breiten b */}
+
+        {/* Kraft F (gerade: nach unten · Knie: nach rechts) */}
+        {knie ? (
+          <g stroke={COL.kraft} strokeWidth={2.5} fill={COL.kraft}>
+            <line x1={stStemEndX} y1={cy} x2={stForceEndX} y2={cy} />
+            <polygon points={`${stForceEndX - 8},${cy - 6} ${stForceEndX - 8},${cy + 6} ${stForceEndX + 2},${cy}`} />
+            <text x={stForceEndX - 3} y={cy - 9} fontSize="14" fontWeight="700">F</text>
+          </g>
+        ) : (
+          <g stroke={COL.kraft} strokeWidth={2.5} fill={COL.kraft}>
+            <line x1={sideCx} y1={sideShaftBottom} x2={sideCx} y2={sideFEnd} />
+            <polygon points={`${sideCx - 6},${sideFEnd - 8} ${sideCx + 6},${sideFEnd - 8} ${sideCx},${sideFEnd + 2}`} />
+            <text x={sideCx + 11} y={sideFEnd - 6} fontSize="14" fontWeight="700">F</text>
+          </g>
+        )}
+
+        {/* 90°-Markierung zwischen Gabel (oben) und Stange (rechts) */}
+        {knie && (
+          <g stroke={COL.stroke} fill="none">
+            <path d={`M ${sideCx} ${cy - 28} A 28 28 0 0 1 ${sideCx + 28} ${cy}`} strokeWidth={1} />
+            <rect x={sideCx + 3} y={cy - 13} width={10} height={10} strokeWidth={0.9} />
+          </g>
+        )}
+
+        {/* Steg-Breite b_G (oben) */}
         <HDim x1={sideCx - wG / 2} x2={sideCx + wG / 2} y={cy - hHalf - 14} wy={cy - ehG / 2} below={false} label={`b_G ${fmt(bG)}`} onClick={dimClick && dimClick('bG', bG)} />
-        <HDim x1={sideCx - wS / 2} x2={sideCx + wS / 2} y={bSdimY} wy={cy + ehS / 2} label={`b_S ${fmt(bS)}`} onClick={dimClick && dimClick('bS', bS)} />
-        {/* Randabstände c (Kraftrichtung): c_S vom Mittelpunkt nach oben, c_G nach unten */}
-        <VDim x={sideCx + wOuter / 2 + 20} yTop={cy - cS * s} yBot={cy} wx={sideCx} wxBot={sideCx + wS / 2} side="right" label={`c_S ${fmt(cS)}`} onClick={dimClick && dimClick('cS', cS)} />
-        <VDim x={sideCx + wOuter / 2 + 20} yTop={cy} yBot={cy + cG * s} wx={sideCx + wG / 2} wxBot={sideCx} side="right" label={`c_G ${fmt(cG)}`} onClick={dimClick && dimClick('cG', cG)} />
+
+        {/* Steg-Breite b_S (gerade: unten waagerecht · Knie: links senkrecht) */}
+        {knie ? (
+          <VDim x={sideCx - wOuter / 2 - 16} yTop={cy - wS / 2} yBot={cy + wS / 2} wx={sideCx - sEyeW / 2} side="left" label={`b_S ${fmt(bS)}`} onClick={dimClick && dimClick('bS', bS)} />
+        ) : (
+          <HDim x1={sideCx - wS / 2} x2={sideCx + wS / 2} y={bSdimY} wy={cy + ehS / 2} label={`b_S ${fmt(bS)}`} onClick={dimClick && dimClick('bS', bS)} />
+        )}
+
+        {/* Randabstand c_S (in Kraftrichtung der Stange; geschlossenes Augenende
+            gerade: oben · Knie: links) */}
+        {knie ? (
+          <HDim x1={sideCx - cS * s} x2={sideCx} y={cy - sEyeH / 2 - 14} wy={cy} below={false} label={`c_S ${fmt(cS)}`} onClick={dimClick && dimClick('cS', cS)} />
+        ) : (
+          <VDim x={sideCx + wOuter / 2 + 20} yTop={cy - cS * s} yBot={cy} wx={sideCx} wxBot={sideCx + wS / 2} side="right" label={`c_S ${fmt(cS)}`} onClick={dimClick && dimClick('cS', cS)} />
+        )}
+
+        {/* Randabstand c_G (Gabel nach unten; gerade rechts · Knie links) */}
+        {knie ? (
+          <VDim x={sideCx - wOuter / 2 - 44} yTop={cy} yBot={cy + cG * s} wx={sideCx} wxBot={sideCx - wG / 2} side="left" label={`c_G ${fmt(cG)}`} onClick={dimClick && dimClick('cG', cG)} />
+        ) : (
+          <VDim x={sideCx + wOuter / 2 + 20} yTop={cy} yBot={cy + cG * s} wx={sideCx + wG / 2} wxBot={sideCx} side="right" label={`c_G ${fmt(cG)}`} onClick={dimClick && dimClick('cG', cG)} />
+        )}
       </g>
 
       {/* ===================== Vorderansicht ===================== */}
@@ -306,26 +362,40 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
       {/* Biegung: Bolzen bricht in der Mitte */}
       {v.biegung && <Riss x1={xStange + sW / 2} y1={boltTop - 4} x2={xStange + sW / 2} y2={boltBottom + 4} />}
 
-      {/* Zug: Riss quer durch die Stege (Seitenansicht) */}
-      {v.zugStange && (
-        <>
-          <Riss x1={sideCx - rp} y1={cy} x2={sideCx - wS / 2} y2={cy} />
-          <Riss x1={sideCx + rp} y1={cy} x2={sideCx + wS / 2} y2={cy} />
-        </>
-      )}
+      {/* Zug: Riss quer durch die Stege (Seitenansicht). Beim Knie steht die
+          Stange quer → Risse senkrecht durch die oberen/unteren Stege. */}
+      {v.zugStange &&
+        (knie ? (
+          <>
+            <Riss x1={sideCx} y1={cy - rp} x2={sideCx} y2={cy - wS / 2} />
+            <Riss x1={sideCx} y1={cy + rp} x2={sideCx} y2={cy + wS / 2} />
+          </>
+        ) : (
+          <>
+            <Riss x1={sideCx - rp} y1={cy} x2={sideCx - wS / 2} y2={cy} />
+            <Riss x1={sideCx + rp} y1={cy} x2={sideCx + wS / 2} y2={cy} />
+          </>
+        ))}
       {v.zugGabel && (
         <>
           <Riss x1={sideCx - rp} y1={cy} x2={sideCx - wG / 2} y2={cy} />
           <Riss x1={sideCx + rp} y1={cy} x2={sideCx + wG / 2} y2={cy} />
         </>
       )}
-      {/* Ausreißen: Riss vom Loch zur Stirnkante (Stange nach oben, Gabel nach unten) */}
-      {v.ausreissStange && (
-        <>
-          <Riss x1={sideCx - rp} y1={cy} x2={sideCx - rp} y2={cy - cS * s} />
-          <Riss x1={sideCx + rp} y1={cy} x2={sideCx + rp} y2={cy - cS * s} />
-        </>
-      )}
+      {/* Ausreißen: Riss vom Loch zur Stirnkante (Stange: gerade nach oben,
+          Knie nach links · Gabel nach unten) */}
+      {v.ausreissStange &&
+        (knie ? (
+          <>
+            <Riss x1={sideCx} y1={cy - rp} x2={sideCx - cS * s} y2={cy - rp} />
+            <Riss x1={sideCx} y1={cy + rp} x2={sideCx - cS * s} y2={cy + rp} />
+          </>
+        ) : (
+          <>
+            <Riss x1={sideCx - rp} y1={cy} x2={sideCx - rp} y2={cy - cS * s} />
+            <Riss x1={sideCx + rp} y1={cy} x2={sideCx + rp} y2={cy - cS * s} />
+          </>
+        ))}
       {v.ausreissGabel && (
         <>
           <Riss x1={sideCx - rp} y1={cy} x2={sideCx - rp} y2={cy + cG * s} />

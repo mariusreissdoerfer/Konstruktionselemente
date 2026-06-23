@@ -91,6 +91,8 @@ export function BolzenverbindungPage() {
   const [cG, setCG] = useLocalStorage('ke.bolzen.cG', 25)
   const [spalt, setSpalt] = useLocalStorage('ke.bolzen.spalt', 0)
   const [einbaufall, setEinbaufall] = useLocalStorage<Einbaufall>('ke.bolzen.einbaufall', 1)
+  const [anordnung, setAnordnung] = useLocalStorage<'gerade' | 'knie'>('ke.bolzen.anordnung', 'gerade')
+  const knie = anordnung === 'knie'
   const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
   const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S235JR')
 
@@ -257,6 +259,17 @@ export function BolzenverbindungPage() {
           hint={`Modell: ${EINBAUFALL_INFO[einbaufall].modell}`}
         />
 
+        <SelectInput<'gerade' | 'knie'>
+          label="Anordnung"
+          value={anordnung}
+          onChange={setAnordnung}
+          options={[
+            { value: 'gerade', label: 'Gerade – Stange in Flucht' },
+            { value: 'knie', label: '90°-Knie – Stange quer' },
+          ]}
+          hint="Bolzen überträgt die Querkraft F unabhängig vom Winkel → Nachweise identisch"
+        />
+
         <SelectInput<Lastfall>
           label="Lastfall"
           value={lastfall}
@@ -356,6 +369,7 @@ export function BolzenverbindungPage() {
             cG={anzeigeCG}
             spalt={spalt}
             einbaufall={einbaufall}
+            knie={knie}
             buchseStangeDa={buchseOn && buchseOrt !== 'gabel' ? buchseDaS : null}
             buchseGabelDa={buchseOn && buchseOrt !== 'stange' ? buchseDaG : null}
             buchseLenStange={buchseOn && buchseOrt !== 'gabel' ? lenS : null}
