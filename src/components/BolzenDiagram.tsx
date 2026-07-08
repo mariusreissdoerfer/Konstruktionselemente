@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { fmt } from '../calc/format'
-import type { Einbaufall } from '../calc/types'
 
 /** Bemaßbare Größen (per Klick in der Zeichnung editierbar). */
 export type DimKey =
@@ -30,7 +29,6 @@ export interface BolzenDiagramProps {
   /** Randabstand Gabel je Lasche c_G in mm */
   cG: number
   spalt: number
-  einbaufall: Einbaufall
   /** 90°-Knie: Stange steht im rechten Winkel zur Gabel */
   knie?: boolean
   buchseStangeDa: number | null

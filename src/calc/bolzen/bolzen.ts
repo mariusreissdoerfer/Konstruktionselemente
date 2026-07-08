@@ -527,7 +527,7 @@ export function legeBolzenAus(
   const bS = Math.ceil(dLochS + F / (tS * sigZ))
   const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
 
-  // Ausreißen → erforderliche Randabstände in Kraftrichtung (gewähltes Modell)
+  // Ausreißen → erforderliche Randabstände in Kraftrichtung (Scherausriss)
   const cS = Math.ceil(randAbstandErf(F, tS, dLochS, 2, fak, material))
   const cG = Math.ceil(randAbstandErf(F, tG, dLochG, 4, fak, material))
 

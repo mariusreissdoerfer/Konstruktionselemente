@@ -32,8 +32,8 @@ export function ResultCard({ n }: { n: Nachweis }) {
       <div className="mt-2 font-mono text-xs text-slate-500">{n.formel}</div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <Kennwert label={einheit === 'mm' ? 'erforderlich' : 'vorhanden'} value={n.vorhanden} unit={einheit} />
-        <Kennwert label={einheit === 'mm' ? 'vorhanden' : 'zulässig'} value={n.zulaessig} unit={einheit} />
+        <Kennwert label="vorhanden" value={n.vorhanden} unit={einheit} />
+        <Kennwert label="zulässig" value={n.zulaessig} unit={einheit} />
         <Kennwert
           label="Sicherheit"
           value={n.sicherheit}
@@ -46,7 +46,7 @@ export function ResultCard({ n }: { n: Nachweis }) {
           Rechenweg
         </summary>
         <div className="mt-1 font-mono">
-          = {n.einsetzen}{einheit === 'mm' ? '' : ` = ${fmt(n.vorhanden)} ${einheit}`}
+          = {n.einsetzen} = {fmt(n.vorhanden)} {einheit}
         </div>
       </details>
     </div>

@@ -368,7 +368,6 @@ export function BolzenverbindungPage() {
             cS={anzeigeCS}
             cG={anzeigeCG}
             spalt={spalt}
-            einbaufall={einbaufall}
             knie={knie}
             buchseStangeDa={buchseOn && buchseOrt !== 'gabel' ? buchseDaS : null}
             buchseGabelDa={buchseOn && buchseOrt !== 'stange' ? buchseDaG : null}
