@@ -223,8 +223,11 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
     ...(auf ? ['Lasche'] : []),
     ...(buchseGabelDa || buchseStangeDa ? ['Buchse'] : []),
   ]
+  // Legende beginnt links (nicht erst unter der Vorderansicht), damit sie
+  // die Canvas-Breite nicht aufbläht und die Zeichnung groß bleibt
   const legendeW = legendeLabels.reduce((a, l) => a + 17 + l.length * 6.4 + 12, 0) + 90
-  const W = Math.max(xEnd + 40, xG1 + legendeW)
+  const legendeX = 20
+  const W = Math.max(xEnd + 40, legendeX + legendeW)
 
   // Buchse-Band (Front): Breite = tragende Länge ≤ Blechdicke, zentriert
   const bushingF = (xMitte: number, t: number, da: number | null, len: number | null, key: string) => {
@@ -533,7 +536,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
             ...(auf ? [{ color: COL.lasche, label: 'Lasche' }] : []),
             ...(buchseGabelDa || buchseStangeDa ? [{ color: COL.buchse, label: 'Buchse' }] : []),
           ]
-          let x = xG1
+          let x = legendeX
           const out = eintraege.map((e) => {
             const el = <Legende key={e.label} x={x} y={legendY} color={e.color} label={e.label} />
             x += 17 + e.label.length * 6.4 + 12
