@@ -517,3 +517,53 @@ describe('Gelenklager (Herstellernachweis, Schaeffler GE360-DW)', () => {
     expect(r.nachweise.find((n) => n.name.includes('Gelenklager'))).toBeUndefined()
   })
 })
+
+describe('Kopfnachweis nach Herstellermethode (Gelenklager aktiv)', () => {
+  const S355_100 = MATERIAL_BY_ID.get('S355J2_100')!
+  const CrMo = MATERIAL_BY_ID.get('42CrMo4')!
+  const Ring = MATERIAL_BY_ID.get('LagerStahl')!
+  const input: BolzenInput = {
+    F: 6125000, d: 360, tS: 165, tG: 118, bS: 1010, bG: 1130, cS: 705, cG: 515,
+    spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+    material: S355_100, bolzenMaterial: CrMo,
+    buchse: {
+      daStange: 480, daGabel: 392, laengeStange: 160, laengeGabel: 118,
+      material: Ring, ort: 'stange', gelenk: { C0r: 23800000, fb: 2.75 },
+    },
+  }
+
+  it('Zug Stange: zulässig = R_p0,2/(1,5·f_b) — deckungsgleich zu Schaeffler', () => {
+    const r = berechneBolzen(input)
+    const z = r.nachweise.find((n) => n.name === 'Zug Stange')!
+    // 295/(1,5·2,75) = 71,52 ; vorhanden 70,03 → S = 1,02 (Schaeffler: 1,021)
+    expect(z.zulaessig).toBeCloseTo(295 / (1.5 * 2.75), 1)
+    expect(z.vorhanden).toBeCloseTo(70.03, 1)
+    expect(z.erfuellt).toBe(true)
+    expect(z.sicherheit).toBeCloseTo(1.02, 2)
+  })
+
+  it('Gabel bleibt bei R/M (0,33·R_m)', () => {
+    const r = berechneBolzen(input)
+    expect(r.nachweise.find((n) => n.name === 'Zug Gabel')!.zulaessig).toBeCloseTo(0.33 * S355_100.Rm, 1)
+  })
+
+  it('ohne Gelenklager weiterhin 0,33·R_m an der Stange', () => {
+    const r = berechneBolzen({ ...input, buchse: { ...input.buchse!, gelenk: null } })
+    expect(r.nachweise.find((n) => n.name === 'Zug Stange')!.zulaessig).toBeCloseTo(0.33 * S355_100.Rm, 1)
+  })
+
+  it('Auslegung: Herstellergrenze vergrößert die Stangenbreite; Kontrolle besteht', () => {
+    const mit = legeBolzenAus({
+      F: 6125000, spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+      material: S355_100, bolzenMaterial: CrMo,
+      buchse: { daStange: 480, daGabel: 392, laengeStange: 165, laengeGabel: 118, material: Ring, ort: 'stange', gelenk: { C0r: 23800000, fb: 2.75 } },
+    })
+    const ohne = legeBolzenAus({
+      F: 6125000, spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+      material: S355_100, bolzenMaterial: CrMo,
+      buchse: { daStange: 480, daGabel: 392, laengeStange: 165, laengeGabel: 118, material: Ring, ort: 'stange', gelenk: null },
+    })
+    expect(mit.bS).toBeGreaterThan(ohne.bS)
+    expect(mit.kontrolle.bestanden).toBe(true)
+  })
+})

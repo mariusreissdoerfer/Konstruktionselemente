@@ -407,7 +407,9 @@ export function BolzenverbindungPage() {
                       <p className="text-[11px] leading-snug text-slate-500">
                         Herstellernachweis statt Pressung Bolzen–Buchse:
                         F·f_b ≤ C_0r (z. B. Schaeffler GE360-DW: C_0r = 23.800 kN,
-                        f_b = 2,75 schwellend). Der Sitz im Auge (außen) wird
+                        f_b = 2,75 schwellend). Der Zugnachweis am Stangenauge
+                        folgt dann ebenfalls der Herstellermethode:
+                        σ ≤ R_p0,2/(1,5·f_b). Der Sitz im Auge (außen) wird
                         weiter als Pressung geprüft.
                       </p>
                     </div>

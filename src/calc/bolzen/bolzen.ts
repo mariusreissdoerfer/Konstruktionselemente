@@ -541,13 +541,22 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const netG = Math.max(bG - dLochG, 0)
   const sigmaZZul = cZug * material.Rm
 
+  // Gelenklager in der Stange: Der Kopfnachweis folgt der Herstellermethode
+  // (Schaeffler-Gelenkkopf): σ_netto ≤ R_p0,2/(1,5·f_b). Der Faktor f_b
+  // stammt aus Dauerfestigkeitsversuchen und enthält Formzahl α_k und die
+  // 83-%-Ausnutzung der Streckgrenze — deutlich strenger als 0,33·R_m.
+  const gelenkS = buchseStange && buchse?.gelenk ? buchse.gelenk : null
+  const sigZulKopfS = gelenkS ? material.Re / (1.5 * gelenkS.fb) : sigmaZZul
+
   nachweise.push(
     nachweis(
       'Zug Stange',
-      'σ_z = F / ((b_S − d) · t_S)',
+      gelenkS
+        ? `σ_z = F / ((b_S − d) · t_S) ≤ R_p0,2/(1,5·f_b)  [Herstellermethode]`
+        : 'σ_z = F / ((b_S − d) · t_S)',
       `${fmt(F)} / ((${fmt(bS)} − ${fmt(dLochS)}) · ${fmt(tS)})`,
       netS > 0 ? F / (netS * tS) : Infinity,
-      sigmaZZul,
+      sigZulKopfS,
     ),
   )
   nachweise.push(
@@ -682,10 +691,12 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
     tLmin = round(Math.max((tSmin - auf.tM) / 2, 0))
   }
 
+  const gelenkS = buchseS && buchse?.gelenk ? buchse.gelenk : null
+  const sigZKopfS = gelenkS ? material.Re / (1.5 * gelenkS.fb) : sigmaZ
   return {
     tSmin: round(tSmin),
     tGmin: round(tGmin),
-    bSmin: round(dLochS + F / (tS * sigmaZ)),
+    bSmin: round(dLochS + F / (tS * sigZKopfS)),
     bGmin: round(dLochG + F / (2 * tG * sigmaZ)),
     cSmin: round(randAbstandErf(F, tS, dLochS, 2, faktoren, material)),
     cGmin: round(randAbstandErf(F, tG, dLochG, 4, faktoren, material)),
@@ -813,10 +824,13 @@ export function legeBolzenAus(
     const massgebend = dBiegungF >= dAbscherung ? 'Biegung' : 'Abscherung'
     const dErf = Math.max(dAbscherung, dBiegungF)
 
-    // Zug → erforderliche Breiten (mit finalen Dicken und d)
+    // Zug → erforderliche Breiten (mit finalen Dicken und d).
+    // Stange mit Gelenklager: Herstellergrenze R_p0,2/(1,5·f_b) am Kopf.
+    const gelenkS = bStange && buchse?.gelenk ? buchse.gelenk : null
+    const sigZKopfS = gelenkS ? material.Re / (1.5 * gelenkS.fb) : sigZ
     const dLochS = bStange && buchse ? buchse.daStange : d
     const dLochG = bGabel && buchse ? buchse.daGabel : d
-    const bS = Math.ceil(dLochS + F / (tS * sigZ))
+    const bS = Math.ceil(dLochS + F / (tS * sigZKopfS))
     const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
 
     // Ausreißen → erforderliche Randabstände in Kraftrichtung (Scherausriss)
