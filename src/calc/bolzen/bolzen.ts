@@ -130,6 +130,9 @@ export function berechnePassbolzenFeld(
   fak: ZulFaktoren,
   material: Material,
   bolzenMaterial?: Material,
+  /** zulässige Zugspannung der gelochten Nettoquerschnitte (Default R/M
+   *  c_zug·R_m; Schaeffler-Methode: R_p0,2/(1,5·f_b)) */
+  sigZugNetto?: number,
 ): PassbolzenFeld {
   const { tM, tL, dP } = auf
   const matB = bolzenMaterial ?? material
@@ -138,7 +141,7 @@ export function berechnePassbolzenFeld(
   // Abscherung im Passbolzen; Lochleibung am weicheren Partner; Zug im Blech
   const tauZul = fak.cTau * matB.Rm
   const pZul = fak.cP * Math.min(material.Rm, matB.Rm)
-  const sigZ = fak.cZug * material.Rm
+  const sigZ = sigZugNetto ?? fak.cZug * material.Rm
   const AP = (Math.PI * dP * dP) / 4
 
   // Tragfähigkeit je Bolzen (zweischnittig; Lochleibung Mittelblech/Laschen)
@@ -296,6 +299,16 @@ export interface BolzenInput {
   /** Werkstoff des Bolzens (Default: material). Abscherung und Biegung
    *  rechnen mit dem Bolzen; Pressungen mit dem weicheren Kontaktpartner. */
   bolzenMaterial?: Material
+  /** Berechnungsmethode für die Zug-Nettoquerschnitte an den Augen und
+   *  Passbolzenreihen (gekerbte Querschnitte):
+   *  - 'rm': Roloff/Matek-Richtwert σ ≤ c_zug·R_m (Default)
+   *  - 'schaeffler': Gelenkkopfmethode σ ≤ R_p0,2/(1,5·f_b) — f_b aus
+   *    Dauerfestigkeitsversuchen (enthält Formzahl α_k und 83-%-Ausnutzung
+   *    der Streckgrenze). Lochleibung, Abscherung, Biegung, Ausreißen und
+   *    der ungekerbte Vollquerschnitt bleiben bei R/M. */
+  methode?: 'rm' | 'schaeffler'
+  /** Belastungsfaktor f_b der Schaeffler-Methode (Default 2,75, schwellend) */
+  fb?: number
   /** optionale Buchse */
   buchse?: BuchseConfig | null
   /** optionale Aufdopplung der Stange (dann gilt t_S = t_M + 2·t_L) */
@@ -547,19 +560,23 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const netG = Math.max(bG - dLochG, 0)
   const sigmaZZul = cZug * material.Rm
 
-  // Gelenklager in der Stange: Der Kopfnachweis folgt der Herstellermethode
-  // (Schaeffler-Gelenkkopf): σ_netto ≤ R_p0,2/(1,5·f_b). Der Faktor f_b
-  // stammt aus Dauerfestigkeitsversuchen und enthält Formzahl α_k und die
-  // 83-%-Ausnutzung der Streckgrenze — deutlich strenger als 0,33·R_m.
+  // Zulässige Zugspannung an gekerbten Nettoquerschnitten (Augen):
+  // Schaeffler-Methode σ ≤ R_p0,2/(1,5·f_b) — f_b aus Dauerfestigkeits-
+  // versuchen (enthält Formzahl α_k und 83-%-Streckgrenzenausnutzung),
+  // deutlich strenger als der R/M-Richtwert 0,33·R_m. Aktiv über die
+  // Methodenwahl oder (nur Stange) über ein deklariertes Gelenklager.
+  const schaeffler = input.methode === 'schaeffler'
   const gelenkS = buchseStange && buchse?.gelenk ? buchse.gelenk : null
-  const sigZulKopfS = gelenkS ? material.Re / (1.5 * gelenkS.fb) : sigmaZZul
+  const fbEff = input.fb ?? gelenkS?.fb ?? 2.75
+  const sigKerb = material.Re / (1.5 * fbEff)
+  const sigZulKopfS = schaeffler || gelenkS ? sigKerb : sigmaZZul
+  const sigZulKopfG = schaeffler ? sigKerb : sigmaZZul
+  const kerbFormel = ' ≤ R_p0,2/(1,5·f_b)  [Schaeffler]'
 
   nachweise.push(
     nachweis(
       'Zug Stange',
-      gelenkS
-        ? `σ_z = F / ((b_S − d) · t_S) ≤ R_p0,2/(1,5·f_b)  [Herstellermethode]`
-        : 'σ_z = F / ((b_S − d) · t_S)',
+      `σ_z = F / ((b_S − d) · t_S)${schaeffler || gelenkS ? kerbFormel : ''}`,
       `${fmt(F)} / ((${fmt(bS)} − ${fmt(dLochS)}) · ${fmt(tS)})`,
       netS > 0 ? F / (netS * tS) : Infinity,
       sigZulKopfS,
@@ -568,10 +585,10 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   nachweise.push(
     nachweis(
       'Zug Gabel',
-      'σ_z = F / (2 · (b_G − d) · t_G)',
+      `σ_z = F / (2 · (b_G − d) · t_G)${schaeffler ? kerbFormel : ''}`,
       `${fmt(F)} / (2 · (${fmt(bG)} − ${fmt(dLochG)}) · ${fmt(tG)})`,
       netG > 0 ? F / (2 * netG * tG) : Infinity,
-      sigmaZZul,
+      sigZulKopfG,
     ),
   )
 
@@ -593,7 +610,10 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
       ),
     )
   }
-  const passfeld = auf && auf.tL > 0 ? berechnePassbolzenFeld(F, bS, auf, faktoren, material, matBolzen) : undefined
+  const passfeld =
+    auf && auf.tL > 0
+      ? berechnePassbolzenFeld(F, bS, auf, faktoren, material, matBolzen, schaeffler ? sigKerb : undefined)
+      : undefined
   if (passfeld) nachweise.push(...passfeld.nachweise)
 
   // ---- Abscherung (zweischnittig) ----
@@ -660,6 +680,10 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[input.lastfall]
   const pZul = faktoren.cP * Math.min(material.Rm, matBolzen.Rm)
   const sigmaZ = faktoren.cZug * material.Rm
+  const schaefflerM = input.methode === 'schaeffler'
+  const fbEffM = input.fb ?? buchse?.gelenk?.fb ?? 2.75
+  const sigKerbM = material.Re / (1.5 * fbEffM)
+  const sigNettoM = schaefflerM ? sigKerbM : sigmaZ
 
   const ort = buchse?.ort ?? 'beide'
   const buchseS = buchse && (ort === 'beide' || ort === 'stange')
@@ -683,12 +707,12 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
     let tMerf = F / (bS * sigmaZ)
     // … und Nettozug an der maßgebenden Passbolzenreihe (Restkraft, Lochabzug
     // mit der Reihenbelegung der aktuellen Konfiguration)
-    const feld = berechnePassbolzenFeld(F, bS, auf, faktoren, material, matBolzen)
+    const feld = berechnePassbolzenFeld(F, bS, auf, faktoren, material, matBolzen, schaefflerM ? sigKerbM : undefined)
     let cum = 0
     for (let i = 0; i < feld.reihen.length; i++) {
       const netto = bS - feld.reihen[i] * auf.dP
       const FRest = F - cum * (feld.FL / feld.n)
-      if (netto > 0) tMerf = Math.max(tMerf, FRest / (netto * sigmaZ))
+      if (netto > 0) tMerf = Math.max(tMerf, FRest / (netto * sigNettoM))
       cum += feld.reihen[i]
     }
     tMmin = round(tMerf)
@@ -698,12 +722,12 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   }
 
   const gelenkS = buchseS && buchse?.gelenk ? buchse.gelenk : null
-  const sigZKopfS = gelenkS ? material.Re / (1.5 * gelenkS.fb) : sigmaZ
+  const sigZKopfS = schaefflerM || gelenkS ? sigKerbM : sigmaZ
   return {
     tSmin: round(tSmin),
     tGmin: round(tGmin),
     bSmin: round(dLochS + F / (tS * sigZKopfS)),
-    bGmin: round(dLochG + F / (2 * tG * sigmaZ)),
+    bGmin: round(dLochG + F / (2 * tG * sigNettoM)),
     cSmin: round(randAbstandErf(F, tS, dLochS, 2, faktoren, material)),
     cGmin: round(randAbstandErf(F, tG, dLochG, 4, faktoren, material)),
     tMmin,
@@ -781,6 +805,11 @@ export function legeBolzenAus(
   const sigB = fak.cSigma * matBolzen.Rm
   const tauZul = fak.cTau * matBolzen.Rm
   const sigZ = fak.cZug * material.Rm
+  // Schaeffler-Methode: gekerbte Zug-Nettoquerschnitte mit R_p0,2/(1,5·f_b)
+  const schaeffler = input.methode === 'schaeffler'
+  const fbEff = input.fb ?? buchse?.gelenk?.fb ?? 2.75
+  const sigKerb = material.Re / (1.5 * fbEff)
+  const sigNetto = schaeffler ? sigKerb : sigZ
 
   const ort = buchse?.ort ?? 'beide'
   const bStange = !!buchse && (ort === 'beide' || ort === 'stange')
@@ -831,13 +860,13 @@ export function legeBolzenAus(
     const dErf = Math.max(dAbscherung, dBiegungF)
 
     // Zug → erforderliche Breiten (mit finalen Dicken und d).
-    // Stange mit Gelenklager: Herstellergrenze R_p0,2/(1,5·f_b) am Kopf.
+    // Schaeffler-Methode bzw. Gelenklager: Kerbgrenze R_p0,2/(1,5·f_b).
     const gelenkS = bStange && buchse?.gelenk ? buchse.gelenk : null
-    const sigZKopfS = gelenkS ? material.Re / (1.5 * gelenkS.fb) : sigZ
+    const sigZKopfS = schaeffler || gelenkS ? sigKerb : sigZ
     const dLochS = bStange && buchse ? buchse.daStange : d
     const dLochG = bGabel && buchse ? buchse.daGabel : d
     const bS = Math.ceil(dLochS + F / (tS * sigZKopfS))
-    const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
+    const bG = Math.ceil(dLochG + F / (2 * tG * sigNetto))
 
     // Ausreißen → erforderliche Randabstände in Kraftrichtung (Scherausriss)
     const cS = Math.ceil(randAbstandErf(F, tS, dLochS, 2, fak, material))
@@ -860,7 +889,7 @@ export function legeBolzenAus(
       let tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
       let feld: PassbolzenFeld | null = null
       for (let i = 0; i < 80 && tL > 0; i++) {
-        const kand = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
+        const kand = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen, schaeffler ? sigKerb : undefined)
         // maßgebendes t_M dieses Layouts (S = 1 je Bedingung): Vollquerschnitt,
         // Nettozug der maßgebenden Reihe (Restkraft!) und Lochleibung
         let cum = 0
@@ -868,7 +897,7 @@ export function legeBolzenAus(
         for (let k = 0; k < kand.reihen.length; k++) {
           const net = bS - kand.reihen[k] * dP
           const FRest = F - cum * (kand.FL / kand.n)
-          tMNetto = Math.max(tMNetto, net > 0 ? FRest / (net * sigZ) : Infinity)
+          tMNetto = Math.max(tMNetto, net > 0 ? FRest / (net * sigNetto) : Infinity)
           cum += kand.reihen[k]
         }
         const tMerf = Math.max(
@@ -886,7 +915,7 @@ export function legeBolzenAus(
       }
       // auf 0,01 mm aufrunden, damit S ≥ 1 sicher bleibt
       tM = Math.ceil(tM * 100 - 1e-6) / 100
-      if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
+      if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen, schaeffler ? sigKerb : undefined)
 
       // Kurze Lasche bevorzugen: Am exakten t_M-Limit erlaubt der Nettozug
       // in den ersten Reihen oft nur 1 Bolzen → langes Feld. Wir erlauben
@@ -901,11 +930,11 @@ export function legeBolzenAus(
         for (let k2 = 2; k2 <= nGeoQuer; k2++) {
           const netto = bS - k2 * dP
           if (netto <= 0) break
-          const tMk = Math.ceil(Math.max(tMBase, F / (netto * sigZ)) * 100 + 1e-6) / 100
+          const tMk = Math.ceil(Math.max(tMBase, F / (netto * sigNetto)) * 100 + 1e-6) / 100
           if (tMk > 1.4 * tMBase) break // Aufpreis-Deckel, tMk wächst monoton
           const tLk = Math.ceil(Math.max(tPaket - tMk, 0) / 2)
           if (tLk <= 0) break
-          const kand = berechnePassbolzenFeld(F, bS, { tM: tMk, tL: tLk, dP }, fak, material, matBolzen)
+          const kand = berechnePassbolzenFeld(F, bS, { tM: tMk, tL: tLk, dP }, fak, material, matBolzen, schaeffler ? sigKerb : undefined)
           if (!kand.nachweise.every((n) => n.erfuellt)) continue
           if (
             kand.feldLaenge < best.feld.feldLaenge ||

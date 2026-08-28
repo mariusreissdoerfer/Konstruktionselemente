@@ -444,9 +444,11 @@ describe('Plausibilität – Eigenschaften der Auslegung', () => {
       const material = mats[Math.floor(rnd() * 3)]
       const bolzenMaterial = mats[Math.floor(rnd() * 3)]
       const aufd = rnd() < 0.5 ? { tM: 0, tL: 0, dP: 6 + Math.floor(rnd() * 90) } : null
+      const methode = rnd() < 0.5 ? ('schaeffler' as const) : ('rm' as const)
+      const fb = 1 + rnd() * 3
       let buchse = null
       if (rnd() < 0.4) {
-        const probe = legeBolzenAus({ F, spalt: 0, einbaufall, lastfall, material, bolzenMaterial, aufdopplung: aufd })
+        const probe = legeBolzenAus({ F, spalt: 0, einbaufall, lastfall, material, bolzenMaterial, methode, fb, aufdopplung: aufd })
         buchse = {
           daStange: Math.round(probe.d * (1.2 + rnd() * 0.3)),
           daGabel: Math.round(probe.d * (1.1 + rnd() * 0.3)),
@@ -454,7 +456,7 @@ describe('Plausibilität – Eigenschaften der Auslegung', () => {
           material: CuSn8, ort: 'beide' as const,
         }
       }
-      const r = legeBolzenAus({ F, spalt: Math.floor(rnd() * 60), einbaufall, lastfall, material, bolzenMaterial, buchse, aufdopplung: aufd })
+      const r = legeBolzenAus({ F, spalt: Math.floor(rnd() * 60), einbaufall, lastfall, material, bolzenMaterial, methode, fb, buchse, aufdopplung: aufd })
       expect(r.kontrolle.bestanden, `Fall ${i}: F=${Math.round(F)} EF=${einbaufall} ${lastfall} ${material.id}/${bolzenMaterial.id}`).toBe(true)
     }
   })
@@ -577,5 +579,50 @@ describe('Feldgeometrie – breite Reihen bevorzugt', () => {
     expect(Math.max(...feld.reihen)).toBeGreaterThanOrEqual(9)
     expect(feld.nReihen).toBeLessThanOrEqual(2)
     expect(feld.nachweise.every((n) => n.erfuellt)).toBe(true)
+  })
+})
+
+describe('Methode Schaeffler (global)', () => {
+  const S355_100 = MATERIAL_BY_ID.get('S355J2_100')!
+  const CrMo = MATERIAL_BY_ID.get('42CrMo4')!
+  const sch: BolzenInput = {
+    F: 6125000, d: 360, tS: 165, tG: 118, bS: 1010, bG: 1130, cS: 705, cG: 515,
+    spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+    material: S355_100, bolzenMaterial: CrMo, methode: 'schaeffler', fb: 2.75,
+  }
+
+  it('beide Augen (Stange + Gabel) mit R_p0,2/(1,5·f_b)', () => {
+    const r = berechneBolzen(sch)
+    const grenze = 295 / (1.5 * 2.75)
+    expect(r.nachweise.find((n) => n.name === 'Zug Stange')!.zulaessig).toBeCloseTo(grenze, 1)
+    expect(r.nachweise.find((n) => n.name === 'Zug Gabel')!.zulaessig).toBeCloseTo(grenze, 1)
+  })
+
+  it('Passbolzenreihen-Nettozug ebenfalls mit Kerbgrenze; freie Länge bleibt R/M', () => {
+    const r = berechneBolzen({ ...sch, tS: 236, aufdopplung: { tM: 118, tL: 59, dP: 80 } })
+    const grenze = 295 / (1.5 * 2.75)
+    expect(r.nachweise.find((n) => n.name === 'Zug Mittelblech (maßgebende Passbolzenreihe)')!.zulaessig).toBeCloseTo(grenze, 1)
+    expect(r.nachweise.find((n) => n.name === 'Zug Laschen (maßgebende Passbolzenreihe)')!.zulaessig).toBeCloseTo(grenze, 1)
+    expect(r.nachweise.find((n) => n.name === 'Zug Mittelblech (freie Länge)')!.zulaessig).toBeCloseTo(0.33 * S355_100.Rm, 1)
+  })
+
+  it('Lochleibung/Abscherung/Biegung/Ausreißen unverändert R/M', () => {
+    const r = berechneBolzen(sch)
+    expect(r.nachweise.find((n) => n.name === 'Lochleibung Stange')!.zulaessig).toBeCloseTo(0.25 * S355_100.Rm, 1)
+    expect(r.nachweise.find((n) => n.name.startsWith('Abscherung'))!.zulaessig).toBeCloseTo(0.15 * CrMo.Rm, 1)
+    expect(r.nachweise.find((n) => n.name === 'Ausreißen Stange')!.zulaessig).toBeCloseTo(0.15 * S355_100.Rm, 1)
+  })
+
+  it('Auslegung nach Schaeffler: deutlich breitere Augen, Kontrolle besteht', () => {
+    const schA = legeBolzenAus({ F: 6125000, spalt: 40, einbaufall: 2, lastfall: 'schwellend', material: S355_100, bolzenMaterial: CrMo, methode: 'schaeffler', fb: 2.75 })
+    const rmA = legeBolzenAus({ F: 6125000, spalt: 40, einbaufall: 2, lastfall: 'schwellend', material: S355_100, bolzenMaterial: CrMo })
+    expect(schA.bS).toBeGreaterThan(rmA.bS)
+    expect(schA.bG).toBeGreaterThan(rmA.bG)
+    expect(schA.kontrolle.bestanden).toBe(true)
+  })
+
+  it('ohne methode-Angabe bleibt alles beim R/M-Verhalten', () => {
+    const r = berechneBolzen({ ...sch, methode: undefined, fb: undefined })
+    expect(r.nachweise.find((n) => n.name === 'Zug Stange')!.zulaessig).toBeCloseTo(0.33 * S355_100.Rm, 1)
   })
 })

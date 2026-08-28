@@ -107,7 +107,9 @@ export function BolzenverbindungPage() {
   const [anordnung, setAnordnung] = useLocalStorage<'gerade' | 'knie'>('ke.bolzen.anordnung', 'gerade')
   const knie = anordnung === 'knie'
   const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
-  const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S355JR')
+  // Berechnungsmethode für die Zug-Nettoquerschnitte (Augen, Passbolzenreihen)
+  const [methode, setMethode] = useLocalStorage<'rm' | 'schaeffler'>('ke.bolzen.methode', 'schaeffler')
+  const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S355J2_100')
   const [bolzenMatId, setBolzenMatId] = useLocalStorage('ke.bolzen.bolzenMat', '42CrMo4')
 
   // Optionen – Aufdopplung der Stange (Mittelblech + Laschen + Passbolzen)
@@ -126,7 +128,7 @@ export function BolzenverbindungPage() {
   const [buchseMatId, setBuchseMatId] = useLocalStorage('ke.bolzen.buchseMat', 'CuSn8')
   const [buchseOrt, setBuchseOrt] = useLocalStorage<BuchseOrt>('ke.bolzen.buchseOrt', 'beide')
   // Gelenklager in der Stange (statt Gleitbuchse): Tragzahlnachweis F·f_b ≤ C_0r
-  const [gelenkOn, setGelenkOn] = useLocalStorage('ke.bolzen.gelenkOn', false)
+  const [gelenkOn, setGelenkOn] = useLocalStorage('ke.bolzen.gelenkOn', true)
   const [gelenkC0r, setGelenkC0r] = useLocalStorage('ke.bolzen.gelenkC0r', 23800) // kN
   const [gelenkFb, setGelenkFb] = useLocalStorage('ke.bolzen.gelenkFb', 2.75)
 
@@ -180,6 +182,8 @@ export function BolzenverbindungPage() {
     lastfall,
     material,
     bolzenMaterial,
+    methode,
+    fb: gelenkFb,
     buchse,
     aufdopplung,
   }
@@ -187,13 +191,13 @@ export function BolzenverbindungPage() {
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, buchse, aufOn, aufTM, aufTL, aufDP],
+    [F, d, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, methode, gelenkFb, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, buchse, aufOn, aufTM, aufTL, aufDP],
+    [F, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, methode, gelenkFb, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
@@ -338,6 +342,24 @@ export function BolzenverbindungPage() {
           hint={`zul.: p=${ergebnis.faktoren.cP}·Rₘ, σ=${ergebnis.faktoren.cSigma}·Rₘ, τ=${ergebnis.faktoren.cTau}·Rₘ`}
         />
 
+        <SelectInput<'rm' | 'schaeffler'>
+          label="Methode Zugnachweise (Augen)"
+          value={methode}
+          onChange={setMethode}
+          options={[
+            { value: 'schaeffler', label: 'Schaeffler: Rₚ₀,₂/(1,5·f_b)' },
+            { value: 'rm', label: 'Roloff/Matek: 0,33·Rₘ (Richtwert)' },
+          ]}
+          hint={
+            methode === 'schaeffler'
+              ? `Gekerbte Nettoquerschnitte (Augen, Passbolzenreihen) dauerfest nach Gelenkkopf-Versuchen; zul. σ = ${fmt(material.Re / (1.5 * gelenkFb), 1)} N/mm². Lochleibung/Abscherung/Biegung/Ausreißen bleiben R/M.`
+              : 'Allgemeine R/M-Richtwerte ohne bauteilspezifische Kerbversuche'
+          }
+        />
+        {methode === 'schaeffler' && (
+          <NumberInput label="Belastungsfaktor" symbol="f_b" unit="–" value={gelenkFb} onChange={setGelenkFb} min={1} max={5} step={0.25} />
+        )}
+
         <SelectInput<string>
           label="Werkstoff Blech (Stange / Gabel)"
           value={materialId}
@@ -403,14 +425,11 @@ export function BolzenverbindungPage() {
                   {gelenkOn && (
                     <div className="space-y-3 border-l-2 border-sky-300 pl-3">
                       <NumberInput label="stat. Tragzahl" symbol="C_0r" unit="kN" value={gelenkC0r} onChange={setGelenkC0r} min={10} max={100000} step={100} />
-                      <NumberInput label="Belastungsfaktor" symbol="f_b" unit="–" value={gelenkFb} onChange={setGelenkFb} min={1} max={5} step={0.25} />
                       <p className="text-[11px] leading-snug text-slate-500">
                         Herstellernachweis statt Pressung Bolzen–Buchse:
-                        F·f_b ≤ C_0r (z. B. Schaeffler GE360-DW: C_0r = 23.800 kN,
-                        f_b = 2,75 schwellend). Der Zugnachweis am Stangenauge
-                        folgt dann ebenfalls der Herstellermethode:
-                        σ ≤ R_p0,2/(1,5·f_b). Der Sitz im Auge (außen) wird
-                        weiter als Pressung geprüft.
+                        F·f_b ≤ C_0r (z. B. Schaeffler GE360-DW: C_0r = 23.800 kN;
+                        f_b siehe Methode, Default 2,75 schwellend). Der Sitz im
+                        Auge (außen) wird weiter als Pressung geprüft.
                       </p>
                     </div>
                   )}
