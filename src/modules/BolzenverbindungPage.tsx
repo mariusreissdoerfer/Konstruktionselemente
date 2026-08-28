@@ -125,6 +125,10 @@ export function BolzenverbindungPage() {
   const [buchseLenG, setBuchseLenG] = useLocalStorage('ke.bolzen.buchseLenG', 118)
   const [buchseMatId, setBuchseMatId] = useLocalStorage('ke.bolzen.buchseMat', 'CuSn8')
   const [buchseOrt, setBuchseOrt] = useLocalStorage<BuchseOrt>('ke.bolzen.buchseOrt', 'beide')
+  // Gelenklager in der Stange (statt Gleitbuchse): Tragzahlnachweis F·f_b ≤ C_0r
+  const [gelenkOn, setGelenkOn] = useLocalStorage('ke.bolzen.gelenkOn', false)
+  const [gelenkC0r, setGelenkC0r] = useLocalStorage('ke.bolzen.gelenkC0r', 23800) // kN
+  const [gelenkFb, setGelenkFb] = useLocalStorage('ke.bolzen.gelenkFb', 2.75)
 
   // Das Auge muss den Bolzen umschließen: b ≥ d (+ Mindeststeg). Wächst d,
   // wandert die Augenkante mit nach außen (Lage), b kann nicht unter d fallen.
@@ -159,6 +163,7 @@ export function BolzenverbindungPage() {
         laengeGabel: lenG,
         material: buchseMat,
         ort: buchseOrt,
+        gelenk: gelenkOn && buchseOrt !== 'gabel' ? { C0r: gelenkC0r * 1000, fb: gelenkFb } : null,
       }
     : null
 
@@ -206,7 +211,7 @@ export function BolzenverbindungPage() {
   const fail = (pred: (n: string) => boolean) =>
     ergebnis.nachweise.some((n) => pred(n.name) && !n.erfuellt)
   const versagen = {
-    lochStange: fail((n) => n.includes('Lochleibung Stange') || n.includes('Stange innen') || n.includes('Stange außen')),
+    lochStange: fail((n) => n.includes('Lochleibung Stange') || n.includes('Stange innen') || n.includes('Stange außen') || n.includes('Gelenklager Stange')),
     lochGabel: fail((n) => n.includes('Lochleibung Gabel') || n.includes('Gabel innen') || n.includes('Gabel außen')),
     zugStange: fail((n) => n === 'Zug Stange'),
     zugGabel: fail((n) => n === 'Zug Gabel'),
@@ -391,6 +396,23 @@ export function BolzenverbindungPage() {
               />
               {buchseOrt !== 'gabel' && (
                 <NumberInput label="Außen-⌀ Stange" symbol="d_a,S" unit="mm" value={buchseDaS} onChange={setBuchseDaS} min={d + 1} max={1500} step={1} />
+              )}
+              {buchseOrt !== 'gabel' && (
+                <>
+                  <Toggle label="Stangen-Buchse ist Gelenklager" checked={gelenkOn} onChange={setGelenkOn} />
+                  {gelenkOn && (
+                    <div className="space-y-3 border-l-2 border-sky-300 pl-3">
+                      <NumberInput label="stat. Tragzahl" symbol="C_0r" unit="kN" value={gelenkC0r} onChange={setGelenkC0r} min={10} max={100000} step={100} />
+                      <NumberInput label="Belastungsfaktor" symbol="f_b" unit="–" value={gelenkFb} onChange={setGelenkFb} min={1} max={5} step={0.25} />
+                      <p className="text-[11px] leading-snug text-slate-500">
+                        Herstellernachweis statt Pressung Bolzen–Buchse:
+                        F·f_b ≤ C_0r (z. B. Schaeffler GE360-DW: C_0r = 23.800 kN,
+                        f_b = 2,75 schwellend). Der Sitz im Auge (außen) wird
+                        weiter als Pressung geprüft.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
               {buchseOrt !== 'stange' && (
                 <NumberInput label="Außen-⌀ Gabel" symbol="d_a,G" unit="mm" value={buchseDaG} onChange={setBuchseDaG} min={d + 1} max={1500} step={1} />

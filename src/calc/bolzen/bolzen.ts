@@ -248,10 +248,20 @@ export interface BuchseConfig {
   laengeStange: number
   /** Buchsenlänge in der Gabel je Lasche in mm */
   laengeGabel: number
-  /** Buchsenwerkstoff */
+  /** Buchsen-/Ringwerkstoff (bei Gelenklager: Außenring gegen das Blech) */
   material: Material
   /** Einbauort der Buchse(n); Standard: beide */
   ort?: BuchseOrt
+  /** Die Stangen-„Buchse" ist ein Gelenklager (z. B. Schaeffler GE..):
+   *  statt der Pressung Bolzen–Buchse gilt der statische Tragzahlnachweis
+   *  des Herstellers F·f_b ≤ C_0r (f_b: Belastungsfaktor, z. B. 2,75 für
+   *  schwellende Last wartungspflichtiger Serien). */
+  gelenk?: {
+    /** statische Tragzahl C_0r in N */
+    C0r: number
+    /** Belastungsfaktor f_b (Herstellerangabe je Lastbild) */
+    fb: number
+  } | null
 }
 
 export interface BolzenInput {
@@ -444,15 +454,30 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   if (buchseStange && buchse) {
     const lenS = buchse.laengeStange
     const lenSa = Math.min(lenS, tS) // Überdeckung Buchse–Blech
-    nachweise.push(
-      nachweis(
-        'Pressung Stange innen (Bolzen–Buchse)',
-        'p = F / (d · L_B)',
-        `${fmt(F)} / (${fmt(d)} · ${fmt(lenS)})`,
-        F / (d * lenS),
-        pZulMat(weicher(matBolzen, buchse.material)),
-      ),
-    )
+    if (buchse.gelenk) {
+      // Gelenklager: statischer Tragzahlnachweis des Herstellers statt
+      // Flächenpressung Bolzen–Buchse (Gleitgewebe trägt deutlich mehr)
+      nachweise.push(
+        nachweis(
+          'Gelenklager Stange – statische Tragzahl',
+          'F · f_b ≤ C_0r',
+          `${fmt(F / 1000)} · ${fmt(buchse.gelenk.fb)} ≤ ${fmt(buchse.gelenk.C0r / 1000)}`,
+          (F * buchse.gelenk.fb) / 1000,
+          buchse.gelenk.C0r / 1000,
+          'kN',
+        ),
+      )
+    } else {
+      nachweise.push(
+        nachweis(
+          'Pressung Stange innen (Bolzen–Buchse)',
+          'p = F / (d · L_B)',
+          `${fmt(F)} / (${fmt(d)} · ${fmt(lenS)})`,
+          F / (d * lenS),
+          pZulMat(weicher(matBolzen, buchse.material)),
+        ),
+      )
+    }
     nachweise.push(
       nachweis(
         'Pressung Stange außen (Buchse–Stange)',
@@ -746,8 +771,12 @@ export function legeBolzenAus(
 
   // Lochleibung → erforderliche Dicken (Annahme: Buchsenlänge = Blechdicke)
   const tSmin = (d: number): number => {
-    if (bStange && buchse)
-      return Math.max(F / (d * pKontakt(matBolzen, buchse.material)), F / (buchse.daStange * pKontakt(buchse.material, material)))
+    if (bStange && buchse) {
+      const aussen = F / (buchse.daStange * pKontakt(buchse.material, material))
+      // Gelenklager: innen gilt die Hersteller-Tragzahl, nicht die Pressung
+      if (buchse.gelenk) return aussen
+      return Math.max(F / (d * pKontakt(matBolzen, buchse.material)), aussen)
+    }
     return F / (d * pZul)
   }
   const tGmin = (d: number): number => {

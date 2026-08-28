@@ -475,3 +475,45 @@ describe('Plausibilität – Eigenschaften der Auslegung', () => {
     }
   })
 })
+
+describe('Gelenklager (Herstellernachweis, Schaeffler GE360-DW)', () => {
+  const S355_100 = MATERIAL_BY_ID.get('S355J2_100')!
+  const CrMo = MATERIAL_BY_ID.get('42CrMo4')!
+  const Ring = MATERIAL_BY_ID.get('LagerStahl')!
+  const input: BolzenInput = {
+    F: 6125000, d: 360, tS: 165, tG: 118, bS: 1010, bG: 1130, cS: 705, cG: 515,
+    spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+    material: S355_100, bolzenMaterial: CrMo,
+    buchse: {
+      daStange: 480, daGabel: 392, laengeStange: 160, laengeGabel: 118,
+      material: Ring, ort: 'stange',
+      gelenk: { C0r: 23800000, fb: 2.75 },
+    },
+  }
+
+  it('statische Tragzahl: F·f_b ≤ C_0r (in kN), ersetzt Innen-Pressung', () => {
+    const r = berechneBolzen(input)
+    const g = r.nachweise.find((n) => n.name === 'Gelenklager Stange – statische Tragzahl')!
+    // 6.125 kN · 2,75 = 16.843,75 kN ≤ 23.800 kN → S = 1,41 (Schaeffler: C0min=16.843.750 N)
+    expect(g.vorhanden).toBeCloseTo(16843.75, 1)
+    expect(g.zulaessig).toBeCloseTo(23800, 1)
+    expect(g.erfuellt).toBe(true)
+    expect(g.einheit).toBe('kN')
+    expect(r.nachweise.find((n) => n.name.includes('Stange innen'))).toBeUndefined()
+    // außen (Sitz im Auge) bleibt als Pressung
+    expect(r.nachweise.find((n) => n.name.includes('Stange außen'))).toBeDefined()
+  })
+
+  it('Nettozug am Auge entspricht der Schaeffler-Kopfrechnung (70 N/mm²)', () => {
+    const r = berechneBolzen(input)
+    const z = r.nachweise.find((n) => n.name === 'Zug Stange')!
+    // F/((d2−D)·C1) = 6.125.000/((1010−480)·165) = 70,0 — identisch zu Schaeffler A_x-x
+    expect(z.vorhanden).toBeCloseTo(70.03, 1)
+  })
+
+  it('ohne gelenk unverändert (Pressung innen erscheint)', () => {
+    const r = berechneBolzen({ ...input, buchse: { ...input.buchse!, gelenk: null } })
+    expect(r.nachweise.find((n) => n.name.includes('Stange innen'))).toBeDefined()
+    expect(r.nachweise.find((n) => n.name.includes('Gelenklager'))).toBeUndefined()
+  })
+})
