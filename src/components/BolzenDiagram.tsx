@@ -151,27 +151,24 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const rp = dp / 2
 
   // Passbolzenfeld (Aufdopplung): Ausdehnung auf der Zugseite in px.
-  // Lange Felder werden verkürzt gezeichnet (max. 4 Reihen + Bruchlinie) und
-  // zusätzlich auf ~90 px gekappt (eigener Feld-Maßstab), damit die
-  // Verbindung selbst groß bleibt. Die exakte Anordnung steht in der Karte.
-  const visReihen = auf ? Math.min(auf.nReihen, 4) : 0
-  const feldKompr = !!auf && auf.nReihen > 4
-  const breakGap = feldKompr ? 14 : 0
-  // gestaffelte Reihen (Bolzen je Reihe); bei Kompression Reihen 1–3 + letzte
+  // Alle Reihen werden vollständig gezeichnet; sehr lange Felder werden
+  // über einen feld-eigenen Maßstab auf ~140 px gekappt, damit die
+  // Verbindung selbst groß bleibt.
+  const visReihen = auf ? auf.nReihen : 0
+  // gestaffelte Reihen (Bolzen je Reihe)
   const reihenArr = auf ? (auf.reihen ?? Array.from({ length: auf.nReihen }, () => auf.nProReihe)) : []
-  const drawRows = auf ? (feldKompr ? [0, 1, 2, auf.nReihen - 1] : reihenArr.map((_, i) => i)) : []
   const teilungPx0 = auf ? 3 * auf.dP * s : 0
   const randPx0 = auf ? 2 * auf.dP * s : 0
   const feldVoll = auf ? 2 * randPx0 + (visReihen - 1) * teilungPx0 : 0
-  const fs = feldVoll > 90 ? 90 / feldVoll : 1 // Feld-eigener Maßstabsfaktor
+  const fs = feldVoll > 140 ? 140 / feldVoll : 1 // Feld-eigener Maßstabsfaktor
   const teilungPx = teilungPx0 * fs
   const randPx = randPx0 * fs
   const rpP = auf ? ((auf.dP * s) / 2) * fs : 0
-  /** Abstand der Reihe i vom Augenrand (letzte Reihe hinter der Bruchlinie) */
-  const rowOff = (i: number) => randPx + i * teilungPx + (feldKompr && i === visReihen - 1 ? breakGap : 0)
-  const feldExtra = auf ? 2 * randPx + (visReihen - 1) * teilungPx + breakGap : 0
-  /** Lage der Bruchlinie (zwischen vorletzter und letzter gezeichneter Reihe) */
-  const breakOff = randPx + (visReihen - 2) * teilungPx + teilungPx / 2 + breakGap / 2
+  /** Abstand der Reihe i vom Augenrand */
+  const rowOff = (i: number) => randPx + i * teilungPx
+  const feldExtra = auf ? 2 * randPx + (visReihen - 1) * teilungPx : 0
+  /** Laschenlänge in mm: Augenhöhe + Feldlänge (für die Bemaßung) */
+  const laschenLenMm = auf ? Math.max(2 * cS, d) + 4 * auf.dP + (auf.nReihen - 1) * 3 * auf.dP : 0
 
   // Stange läuft beim Knie nach rechts: Stiel + Kraftpfeil
   const stStemEndX = sideCx + sEyeW / 2 + feldExtra + 34
@@ -283,40 +280,21 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
             ) : (
               <rect x={sideCx - wS / 2} y={cy - ehS / 2} width={wS} height={ehS + feldExtra} rx={Math.min(wS, ehS) / 2} fill={COL.lasche} stroke={COL.lascheStroke} strokeWidth={1.2} />
             )}
-            {drawRows.flatMap((ri, i) =>
-              Array.from({ length: reihenArr[ri] ?? 1 }).map((_, j) => {
+            {reihenArr.flatMap((anz, i) =>
+              Array.from({ length: anz }).map((_, j) => {
                 const laengs = rowOff(i) // Abstand vom Augenrand in Kraftrichtung
-                const quer = (j - ((reihenArr[ri] ?? 1) - 1) / 2) * teilungPx
+                const quer = (j - (anz - 1) / 2) * teilungPx
                 const px = knie ? sideCx + sEyeW / 2 + laengs : sideCx + quer
                 const py = knie ? cy + quer : cy + ehS / 2 + laengs
-                return <circle key={`${ri}-${j}`} cx={px} cy={py} r={rpP} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.2} />
+                return <circle key={`${i}-${j}`} cx={px} cy={py} r={rpP} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.2} />
               }),
             )}
-            {/* Bruchlinie: Feld verkürzt dargestellt */}
-            {feldKompr &&
-              (knie ? (
-                (() => {
-                  const bx = sideCx + sEyeW / 2 + breakOff
-                  return (
-                    <g>
-                      <rect x={bx - 4} y={cy - sEyeH / 2 - 2} width={8} height={sEyeH + 4} fill="white" opacity={0.9} />
-                      <line x1={bx - 3} y1={cy - sEyeH / 2 - 4} x2={bx + 3} y2={cy + sEyeH / 2 + 4} stroke={COL.lascheStroke} strokeWidth={1.2} />
-                      <line x1={bx + 3} y1={cy - sEyeH / 2 - 4} x2={bx + 9} y2={cy + sEyeH / 2 + 4} stroke={COL.lascheStroke} strokeWidth={1.2} />
-                    </g>
-                  )
-                })()
-              ) : (
-                (() => {
-                  const by = cy + ehS / 2 + breakOff
-                  return (
-                    <g>
-                      <rect x={sideCx - wS / 2 - 2} y={by - 4} width={wS + 4} height={8} fill="white" opacity={0.9} />
-                      <line x1={sideCx - wS / 2 - 4} y1={by + 3} x2={sideCx + wS / 2 + 4} y2={by - 3} stroke={COL.lascheStroke} strokeWidth={1.2} />
-                      <line x1={sideCx - wS / 2 - 4} y1={by + 9} x2={sideCx + wS / 2 + 4} y2={by + 3} stroke={COL.lascheStroke} strokeWidth={1.2} />
-                    </g>
-                  )
-                })()
-              ))}
+            {/* Laschenlänge bemaßen */}
+            {knie ? (
+              <HDim x1={sideCx - sEyeW / 2} x2={sideCx + sEyeW / 2 + feldExtra} y={cy - sEyeH / 2 - 34} wy={cy - sEyeH / 2} below={false} label={`L_L ${fmt(laschenLenMm)}`} />
+            ) : (
+              <VDim x={sideCx + wOuter / 2 + 48} yTop={cy - ehS / 2} yBot={cy + ehS / 2 + feldExtra} wx={sideCx + wS / 2} side="right" label={`L_L ${fmt(laschenLenMm)}`} />
+            )}
           </g>
         )}
         {rb > 0 && <circle cx={sideCx} cy={cy} r={rb} fill={COL.buchse} stroke={COL.buchseStroke} strokeWidth={1.2} />}
@@ -396,17 +374,6 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
                   Array.from({ length: visReihen }).map((_, i) => (
                     <rect key={i} x={xStange} y={cy + ehS / 2 + rowOff(i) - rpP} width={sW} height={2 * rpP} rx={2} fill={COL.bolzen} opacity={0.9} stroke={COL.bolzenStroke} strokeWidth={1} />
                   ))}
-                {/* Bruchlinie auch im Schnitt */}
-                {!knie && feldKompr && (() => {
-                  const by = cy + ehS / 2 + breakOff
-                  return (
-                    <g>
-                      <rect x={xStange - 2} y={by - 4} width={sW + 4} height={8} fill="white" opacity={0.9} />
-                      <line x1={xStange - 4} y1={by + 3} x2={xStange + sW + 4} y2={by - 3} stroke={COL.lascheStroke} strokeWidth={1.2} />
-                      <line x1={xStange - 4} y1={by + 9} x2={xStange + sW + 4} y2={by + 3} stroke={COL.lascheStroke} strokeWidth={1.2} />
-                    </g>
-                  )
-                })()}
               </>
             )
           })()

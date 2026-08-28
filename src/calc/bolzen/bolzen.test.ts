@@ -194,9 +194,10 @@ describe('berechneBolzen – Buchse (getrennt Stange/Gabel, mit Länge)', () => 
     })
     const innen = r.nachweise.find((n) => n.name.includes('Stange innen'))!
     const aussen = r.nachweise.find((n) => n.name.includes('Stange außen'))!
-    // innen: F/(d·L_B) = 20000/(20·16) = 62,5 ; zul = 0,25·Rm(CuSn8)
+    // innen: F/(d·L_B) = 20000/(20·16) = 62,5 ; zul = 0,25·Rm des weicheren
+    // Kontaktpartners (Bolzen S235: 360 < CuSn8: 390)
     expect(innen.vorhanden).toBeCloseTo(62.5, 2)
-    expect(innen.zulaessig).toBeCloseTo(0.25 * CuSn8.Rm, 2)
+    expect(innen.zulaessig).toBeCloseTo(0.25 * Math.min(S235.Rm, CuSn8.Rm), 2)
     // außen: F/(daS·min(16,20)) = 20000/(30·16) = 41,67 ; zul = 0,25·Rm(S235)
     expect(aussen.vorhanden).toBeCloseTo(41.67, 1)
     expect(aussen.zulaessig).toBeCloseTo(0.25 * S235.Rm, 2)
@@ -389,5 +390,42 @@ describe('Auslegung – Mittelblech ans Limit', () => {
     // darf das alte ceil-auf-ganze-mm-Ergebnis nie überschreiten, sofern das
     // Feld nicht mehr verlangt (Kontrolle deckt das ab)
     expect(r.aufdopplung!.tM).toBeLessThanOrEqual(Math.ceil(100000 / (r.bS * sigZ)) + 3)
+  })
+})
+
+describe('Getrennte Werkstoffe Bolzen/Blech', () => {
+  const S355 = MATERIAL_BY_ID.get('S355JR')!
+  const CrMo = MATERIAL_BY_ID.get('42CrMo4')!
+  const both = { ...base, material: S355, bolzenMaterial: CrMo }
+
+  it('Abscherung und Biegung nutzen den Bolzenwerkstoff', () => {
+    const r = berechneBolzen(both)
+    expect(r.nachweise.find((n) => n.name.startsWith('Abscherung'))!.zulaessig).toBeCloseTo(0.15 * CrMo.Rm, 2)
+    expect(r.nachweise.find((n) => n.name === 'Biegung')!.zulaessig).toBeCloseTo(0.2 * CrMo.Rm, 2)
+  })
+
+  it('Zug und Ausreißen nutzen den Blechwerkstoff', () => {
+    const r = berechneBolzen(both)
+    expect(r.nachweise.find((n) => n.name === 'Zug Stange')!.zulaessig).toBeCloseTo(0.33 * S355.Rm, 2)
+    expect(r.nachweise.find((n) => n.name === 'Ausreißen Stange')!.zulaessig).toBeCloseTo(0.15 * S355.Rm, 2)
+  })
+
+  it('Lochleibung nutzt den weicheren Kontaktpartner (Blech)', () => {
+    const r = berechneBolzen(both)
+    expect(r.nachweise.find((n) => n.name === 'Lochleibung Stange')!.zulaessig).toBeCloseTo(0.25 * S355.Rm, 2)
+  })
+
+  it('ohne bolzenMaterial identisch zu vorher (Default = material)', () => {
+    const a = berechneBolzen(base)
+    const b = berechneBolzen({ ...base, bolzenMaterial: S235 })
+    expect(a.nachweise.map((n) => n.vorhanden)).toEqual(b.nachweise.map((n) => n.vorhanden))
+    expect(a.nachweise.map((n) => n.zulaessig)).toEqual(b.nachweise.map((n) => n.zulaessig))
+  })
+
+  it('Auslegung: härterer Bolzen → kleinerer erforderlicher Durchmesser', () => {
+    const weich = legeBolzenAus({ F: 100000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S355 })
+    const hart = legeBolzenAus({ F: 100000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S355, bolzenMaterial: CrMo })
+    expect(hart.dErf).toBeLessThan(weich.dErf)
+    expect(hart.kontrolle.bestanden).toBe(true)
   })
 })

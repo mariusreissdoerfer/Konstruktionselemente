@@ -107,7 +107,8 @@ export function BolzenverbindungPage() {
   const [anordnung, setAnordnung] = useLocalStorage<'gerade' | 'knie'>('ke.bolzen.anordnung', 'gerade')
   const knie = anordnung === 'knie'
   const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
-  const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', '42CrMo4')
+  const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S355JR')
+  const [bolzenMatId, setBolzenMatId] = useLocalStorage('ke.bolzen.bolzenMat', '42CrMo4')
 
   // Optionen – Aufdopplung der Stange (Mittelblech + Laschen + Passbolzen)
   const [aufOn, setAufOn] = useLocalStorage('ke.bolzen.aufOn', true)
@@ -138,6 +139,7 @@ export function BolzenverbindungPage() {
   }, [d])
 
   const material = MATERIAL_BY_ID.get(materialId) ?? MATERIALS[0]
+  const bolzenMaterial = MATERIAL_BY_ID.get(bolzenMatId) ?? MATERIALS[0]
   const buchseMat = MATERIAL_BY_ID.get(buchseMatId) ?? BUCHSEN_MATERIALS[0]
 
   // Aufdopplung: im Nachweis-Modus gibt der Nutzer t_M/t_L vor (Paket
@@ -172,6 +174,7 @@ export function BolzenverbindungPage() {
     einbaufall,
     lastfall,
     material,
+    bolzenMaterial,
     buchse,
     aufdopplung,
   }
@@ -179,13 +182,13 @@ export function BolzenverbindungPage() {
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse, aufOn, aufTM, aufTL, aufDP],
+    [F, d, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse, aufOn, aufTM, aufTL, aufDP],
+    [F, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
@@ -331,7 +334,7 @@ export function BolzenverbindungPage() {
         />
 
         <SelectInput<string>
-          label="Werkstoff (Bolzen / Blech)"
+          label="Werkstoff Blech (Stange / Gabel)"
           value={materialId}
           onChange={setMaterialId}
           options={MATERIALS.map((m) => ({
@@ -339,6 +342,17 @@ export function BolzenverbindungPage() {
             label: `${m.kurz}  (Rₘ=${fmt(m.Rm)}, Rₑ=${fmt(m.Re)})`,
           }))}
           hint={material.name}
+        />
+
+        <SelectInput<string>
+          label="Werkstoff Bolzen"
+          value={bolzenMatId}
+          onChange={setBolzenMatId}
+          options={MATERIALS.map((m) => ({
+            value: m.id,
+            label: `${m.kurz}  (Rₘ=${fmt(m.Rm)}, Rₑ=${fmt(m.Re)})`,
+          }))}
+          hint={`${bolzenMaterial.name} · Abscherung/Biegung; Pressung mit weicherem Partner`}
         />
 
         {/* Optionen */}
@@ -553,6 +567,7 @@ export function BolzenverbindungPage() {
               <AusMass label="Teilung (3·d_P)" wert={passfeld.teilung} />
               <AusMass label="Rand längs (2·d_P)" wert={passfeld.randLaengs} />
               <AusMass label="Feldlänge" wert={passfeld.feldLaenge} />
+              <AusMass label="Laschenlänge L_L" wert={Math.max(2 * anzeigeCS, anzeigeD) + passfeld.feldLaenge} stark />
               <AusMass label="Laschenanteil F_L" wert={NaN}>
                 {fmt(passfeld.FL / 1000)} kN ({fmt((100 * passfeld.FL) / F, 0)} %)
               </AusMass>

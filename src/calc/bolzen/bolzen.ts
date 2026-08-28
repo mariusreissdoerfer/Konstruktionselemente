@@ -126,12 +126,15 @@ export function berechnePassbolzenFeld(
   auf: AufdopplungConfig,
   fak: ZulFaktoren,
   material: Material,
+  bolzenMaterial?: Material,
 ): PassbolzenFeld {
   const { tM, tL, dP } = auf
+  const matB = bolzenMaterial ?? material
   const tPaket = tM + 2 * tL
   const FL = (F * 2 * tL) / tPaket
-  const tauZul = fak.cTau * material.Rm
-  const pZul = fak.cP * material.Rm
+  // Abscherung im Passbolzen; Lochleibung am weicheren Partner; Zug im Blech
+  const tauZul = fak.cTau * matB.Rm
+  const pZul = fak.cP * Math.min(material.Rm, matB.Rm)
   const sigZ = fak.cZug * material.Rm
   const AP = (Math.PI * dP * dP) / 4
 
@@ -272,7 +275,11 @@ export interface BolzenInput {
   spalt: number
   einbaufall: Einbaufall
   lastfall: Lastfall
+  /** Werkstoff der Bleche (Stange, Gabel, Mittelblech/Laschen) */
   material: Material
+  /** Werkstoff des Bolzens (Default: material). Abscherung und Biegung
+   *  rechnen mit dem Bolzen; Pressungen mit dem weicheren Kontaktpartner. */
+  bolzenMaterial?: Material
   /** optionale Buchse */
   buchse?: BuchseConfig | null
   /** optionale Aufdopplung der Stange (dann gilt t_S = t_M + 2·t_L) */
@@ -423,6 +430,9 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const Wb = widerstandsmoment(d)
   const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
 
+  // Bolzenwerkstoff (Abscherung/Biegung); Pressung am weicheren Partner
+  const matBolzen = input.bolzenMaterial ?? material
+  const weicher = (a: Material, b: Material) => (a.Rm <= b.Rm ? a : b)
   const pZulMat = (m: Material) => cP * m.Rm
   const nachweise: Nachweis[] = []
 
@@ -440,7 +450,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
         'p = F / (d · L_B)',
         `${fmt(F)} / (${fmt(d)} · ${fmt(lenS)})`,
         F / (d * lenS),
-        pZulMat(buchse.material),
+        pZulMat(weicher(matBolzen, buchse.material)),
       ),
     )
     nachweise.push(
@@ -449,7 +459,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
         'p = F / (d_a · min(L_B, t_S))',
         `${fmt(F)} / (${fmt(buchse.daStange)} · ${fmt(lenSa)})`,
         F / (buchse.daStange * lenSa),
-        pZulMat(material),
+        pZulMat(weicher(buchse.material, material)),
       ),
     )
   } else {
@@ -459,7 +469,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
         'p_S = F / (d · t_S)',
         `${fmt(F)} / (${fmt(d)} · ${fmt(tS)})`,
         F / (d * tS),
-        pZulMat(material),
+        pZulMat(weicher(matBolzen, material)),
       ),
     )
   }
@@ -474,7 +484,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
         'p = F / (2 · d · L_B)',
         `${fmt(F)} / (2 · ${fmt(d)} · ${fmt(lenG)})`,
         F / (2 * d * lenG),
-        pZulMat(buchse.material),
+        pZulMat(weicher(matBolzen, buchse.material)),
       ),
     )
     nachweise.push(
@@ -483,7 +493,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
         'p = F / (2 · d_a · min(L_B, t_G))',
         `${fmt(F)} / (2 · ${fmt(buchse.daGabel)} · ${fmt(lenGa)})`,
         F / (2 * buchse.daGabel * lenGa),
-        pZulMat(material),
+        pZulMat(weicher(buchse.material, material)),
       ),
     )
   } else {
@@ -493,7 +503,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
         'p_G = F / (2 · d · t_G)',
         `${fmt(F)} / (2 · ${fmt(d)} · ${fmt(tG)})`,
         F / (2 * d * tG),
-        pZulMat(material),
+        pZulMat(weicher(matBolzen, material)),
       ),
     )
   }
@@ -543,7 +553,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
       ),
     )
   }
-  const passfeld = auf && auf.tL > 0 ? berechnePassbolzenFeld(F, bS, auf, faktoren, material) : undefined
+  const passfeld = auf && auf.tL > 0 ? berechnePassbolzenFeld(F, bS, auf, faktoren, material, matBolzen) : undefined
   if (passfeld) nachweise.push(...passfeld.nachweise)
 
   // ---- Abscherung (zweischnittig) ----
@@ -553,7 +563,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
       'τ_a = F / (2 · A) ,  A = π·d²/4',
       `${fmt(F)} / (2 · ${fmt(A)})`,
       F / (2 * A),
-      cTau * material.Rm,
+      cTau * matBolzen.Rm,
     ),
   )
 
@@ -564,7 +574,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
       `σ_b = M_b / W ,  ${biegemomentFormel(einbaufall)}`,
       `${fmt(Mb)} / ${fmt(Wb)}`,
       Mb / Wb,
-      cSigma * material.Rm,
+      cSigma * matBolzen.Rm,
     ),
   )
 
@@ -606,8 +616,9 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   const auf = input.aufdopplung ?? null
   const tS = auf ? auf.tM + 2 * auf.tL : input.tS
   const buchse = input.buchse ?? null
+  const matBolzen = input.bolzenMaterial ?? material
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[input.lastfall]
-  const pZul = faktoren.cP * material.Rm
+  const pZul = faktoren.cP * Math.min(material.Rm, matBolzen.Rm)
   const sigmaZ = faktoren.cZug * material.Rm
 
   const ort = buchse?.ort ?? 'beide'
@@ -626,7 +637,7 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
     let tMerf = F / (bS * sigmaZ)
     // … und Nettozug an der maßgebenden Passbolzenreihe (Restkraft, Lochabzug
     // mit der Reihenbelegung der aktuellen Konfiguration)
-    const feld = berechnePassbolzenFeld(F, bS, auf, faktoren, material)
+    const feld = berechnePassbolzenFeld(F, bS, auf, faktoren, material, matBolzen)
     let cum = 0
     for (let i = 0; i < feld.reihen.length; i++) {
       const netto = bS - feld.reihen[i] * auf.dP
@@ -713,10 +724,14 @@ export function legeBolzenAus(
 ): AuslegungErgebnis {
   const { F, spalt, einbaufall, lastfall, material } = input
   const buchse = input.buchse ?? null
+  const matBolzen = input.bolzenMaterial ?? material
   const fak = input.faktoren ?? ZUL_FAKTOREN[lastfall]
-  const pZul = fak.cP * material.Rm
-  const sigB = fak.cSigma * material.Rm
-  const tauZul = fak.cTau * material.Rm
+  // Pressung am weicheren Kontaktpartner; Biegung/Abscherung im Bolzen;
+  // Zug/Ausreißen im Blech
+  const pKontakt = (a: Material, b: Material) => fak.cP * Math.min(a.Rm, b.Rm)
+  const pZul = pKontakt(material, matBolzen)
+  const sigB = fak.cSigma * matBolzen.Rm
+  const tauZul = fak.cTau * matBolzen.Rm
   const sigZ = fak.cZug * material.Rm
 
   const ort = buchse?.ort ?? 'beide'
@@ -726,12 +741,12 @@ export function legeBolzenAus(
   // Lochleibung → erforderliche Dicken (Annahme: Buchsenlänge = Blechdicke)
   const tSmin = (d: number): number => {
     if (bStange && buchse)
-      return Math.max(F / (d * fak.cP * buchse.material.Rm), F / (buchse.daStange * pZul))
+      return Math.max(F / (d * pKontakt(matBolzen, buchse.material)), F / (buchse.daStange * pKontakt(buchse.material, material)))
     return F / (d * pZul)
   }
   const tGmin = (d: number): number => {
     if (bGabel && buchse)
-      return Math.max(F / (2 * d * fak.cP * buchse.material.Rm), F / (2 * buchse.daGabel * pZul))
+      return Math.max(F / (2 * d * pKontakt(matBolzen, buchse.material)), F / (2 * buchse.daGabel * pKontakt(buchse.material, material)))
     return F / (2 * d * pZul)
   }
 
@@ -779,12 +794,12 @@ export function legeBolzenAus(
   if (input.aufdopplung) {
     const dP = input.aufdopplung.dP
     const tPaket = tS
-    const pZulF = fak.cP * material.Rm
+    const pZulF = fak.cP * Math.min(material.Rm, matBolzen.Rm)
     let tM = F / (bS * sigZ) // exaktes Limit des Vollquerschnitts (S = 1)
     let tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
     let feld: PassbolzenFeld | null = null
     for (let i = 0; i < 80 && tL > 0; i++) {
-      const kand = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material)
+      const kand = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
       // maßgebendes t_M dieses Layouts (S = 1 je Bedingung): Vollquerschnitt,
       // Nettozug der maßgebenden Reihe (Restkraft!) und Lochleibung
       let cum = 0
@@ -810,7 +825,7 @@ export function legeBolzenAus(
     }
     // auf 0,01 mm aufrunden, damit S ≥ 1 sicher bleibt
     tM = Math.ceil(tM * 100 - 1e-6) / 100
-    if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material)
+    if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
     if (tL <= 0) {
       // Mittelblech braucht ohnehin die volle Paketdicke → Laschen unnötig
       aufdopplungOut = { tM: tPaket, tL: 0, feld: null }
