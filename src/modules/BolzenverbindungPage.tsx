@@ -93,7 +93,7 @@ function MindMass({ label, wert, ist }: { label: string; wert: number; ist: numb
 export function BolzenverbindungPage() {
   // Eingaben werden im Browser (localStorage) gespeichert und beim erneuten
   // Laden wiederhergestellt.
-  const [modus, setModus] = useLocalStorage<Modus>('ke.bolzen.modus', 'nachweis')
+  const [modus, setModus] = useLocalStorage<Modus>('ke.bolzen.modus', 'auslegung')
   const [F, setF] = useLocalStorage('ke.bolzen.F', 6000000)
   const [d, setD] = useLocalStorage('ke.bolzen.d', 360)
   const [tS, setTS] = useLocalStorage('ke.bolzen.tS', 236)
