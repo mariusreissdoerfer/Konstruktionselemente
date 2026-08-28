@@ -222,8 +222,8 @@ export function BolzenverbindungPage() {
   const anzeigeAuf =
     aufOn && passfeld
       ? aus && auslegung.aufdopplung
-        ? { tM: auslegung.aufdopplung.tM, tL: auslegung.aufdopplung.tL, dP: aufDP, nReihen: passfeld.nReihen, nProReihe: passfeld.nProReihe }
-        : { tM: aufTM, tL: aufTL, dP: aufDP, nReihen: passfeld.nReihen, nProReihe: passfeld.nProReihe }
+        ? { tM: auslegung.aufdopplung.tM, tL: auslegung.aufdopplung.tL, dP: aufDP, nReihen: passfeld.nReihen, nProReihe: passfeld.nProReihe, reihen: passfeld.reihen }
+        : { tM: aufTM, tL: aufTL, dP: aufDP, nReihen: passfeld.nReihen, nProReihe: passfeld.nProReihe, reihen: passfeld.reihen }
       : null
 
   // Maße per Klick in der Zeichnung ändern (nur im Nachweis-Modus)
@@ -481,7 +481,7 @@ export function BolzenverbindungPage() {
               // Mittelblech ans Limit: höchste Ausnutzung seiner Nachweise
               const mNamen = [
                 'Zug Mittelblech (freie Länge)',
-                'Zug Mittelblech (1. Passbolzenreihe)',
+                'Zug Mittelblech (maßgebende Passbolzenreihe)',
                 'Passbolzen – Lochleibung Mittelblech',
               ]
               const eta = Math.max(
@@ -493,7 +493,7 @@ export function BolzenverbindungPage() {
               const ersparnis = 1 - auslegung.aufdopplung!.tM / auslegung.tS
               return (
                 <p className="mt-2 text-xs text-slate-500">
-                  Mittelblech ans Limit gelegt (0,5-mm-Raster):
+                  Mittelblech exakt auf S = 1 gelegt:
                   Ausnutzung <span className="font-semibold text-slate-700">{fmt(100 * eta, 0)} %</span> ·
                   Querschnitt der freien Länge <span className="font-semibold text-emerald-600">−{fmt(100 * ersparnis, 0)} %</span> gegenüber
                   durchgehender Paketdicke ({fmt(auslegung.aufdopplung!.tM)} statt {fmt(auslegung.tS)} mm).
@@ -530,7 +530,7 @@ export function BolzenverbindungPage() {
             <p className="mt-2 text-xs text-slate-400">
               Dicke aus Lochleibung, Steg b aus Zug, Randabstand c aus Ausreißen
               (für ⌀{fmt(anzeigeD)} mm, mit aktueller Dicke). Werte ≥ Mindestmaß.
-              {aufOn && ' t_M aus Vollquerschnitt (freie Länge) und Nettozug an der 1. Passbolzenreihe; t_L als Rest zum Paket aus Lochleibung (mit aktuellem t_M).'}
+              {aufOn && ' t_M aus Vollquerschnitt (freie Länge) und Nettozug an der maßgebenden Passbolzenreihe; t_L als Rest zum Paket aus Lochleibung (mit aktuellem t_M).'}
             </p>
           </div>
         )}
@@ -541,8 +541,13 @@ export function BolzenverbindungPage() {
               Passbolzenfeld (Krafteinleitung Laschen, Zugseite)
             </h3>
             <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 xl:grid-cols-2">
-              <AusMass label="Anordnung" wert={NaN} stark>
-                {passfeld.nReihen} × {passfeld.nProReihe} Stk
+              <AusMass label="Anordnung (Schaft → Auge)" wert={NaN} stark>
+                {passfeld.reihen.every((r) => r === passfeld.reihen[0])
+                  ? `${passfeld.nReihen} × ${passfeld.reihen[0]}`
+                  : passfeld.nReihen <= 7
+                    ? passfeld.reihen.join('+')
+                    : `${passfeld.nReihen} Reihen`}{' '}
+                = {passfeld.n} Stk
               </AusMass>
               <AusMass label="Passbolzen ⌀d_P" wert={aufDP} />
               <AusMass label="Teilung (3·d_P)" wert={passfeld.teilung} />
@@ -554,8 +559,10 @@ export function BolzenverbindungPage() {
             </div>
             <p className="mt-2 text-xs text-slate-500">
               Erforderlich: {passfeld.nErf} Passbolzen (Abscherung/Lochleibung),
-              verbaut {passfeld.n}. Reihenanzahl begrenzt durch Nettozug des
-              Mittelblechs an der 1. Reihe und die Blechbreite.
+              verbaut {passfeld.n}. Gestaffelte Anordnung für kurze Laschen:
+              die 1. Reihe (Schaftseite, volle Kraft im Mittelblech) trägt
+              wenige Bolzen, jede weitere mehr — begrenzt durch Nettozug und
+              Blechbreite (Teilung 3·d_P).
             </p>
           </div>
         )}

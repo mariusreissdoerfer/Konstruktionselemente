@@ -38,6 +38,8 @@ export interface BolzenDiagramProps {
     dP: number
     nReihen: number
     nProReihe: number
+    /** Bolzen je Reihe (gestaffelt, Reihe 1 = schaftseitig); Fallback: nProReihe überall */
+    reihen?: number[]
   } | null
   buchseStangeDa: number | null
   buchseGabelDa: number | null
@@ -155,6 +157,9 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const visReihen = auf ? Math.min(auf.nReihen, 4) : 0
   const feldKompr = !!auf && auf.nReihen > 4
   const breakGap = feldKompr ? 14 : 0
+  // gestaffelte Reihen (Bolzen je Reihe); bei Kompression Reihen 1–3 + letzte
+  const reihenArr = auf ? (auf.reihen ?? Array.from({ length: auf.nReihen }, () => auf.nProReihe)) : []
+  const drawRows = auf ? (feldKompr ? [0, 1, 2, auf.nReihen - 1] : reihenArr.map((_, i) => i)) : []
   const teilungPx0 = auf ? 3 * auf.dP * s : 0
   const randPx0 = auf ? 2 * auf.dP * s : 0
   const feldVoll = auf ? 2 * randPx0 + (visReihen - 1) * teilungPx0 : 0
@@ -278,13 +283,13 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
             ) : (
               <rect x={sideCx - wS / 2} y={cy - ehS / 2} width={wS} height={ehS + feldExtra} rx={Math.min(wS, ehS) / 2} fill={COL.lasche} stroke={COL.lascheStroke} strokeWidth={1.2} />
             )}
-            {Array.from({ length: visReihen }).flatMap((_, i) =>
-              Array.from({ length: auf.nProReihe }).map((_, j) => {
+            {drawRows.flatMap((ri, i) =>
+              Array.from({ length: reihenArr[ri] ?? 1 }).map((_, j) => {
                 const laengs = rowOff(i) // Abstand vom Augenrand in Kraftrichtung
-                const quer = (j - (auf.nProReihe - 1) / 2) * teilungPx
+                const quer = (j - ((reihenArr[ri] ?? 1) - 1) / 2) * teilungPx
                 const px = knie ? sideCx + sEyeW / 2 + laengs : sideCx + quer
                 const py = knie ? cy + quer : cy + ehS / 2 + laengs
-                return <circle key={`${i}-${j}`} cx={px} cy={py} r={rpP} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.2} />
+                return <circle key={`${ri}-${j}`} cx={px} cy={py} r={rpP} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.2} />
               }),
             )}
             {/* Bruchlinie: Feld verkürzt dargestellt */}

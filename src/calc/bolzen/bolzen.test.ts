@@ -277,11 +277,25 @@ describe('Aufdopplung – Passbolzenfeld', () => {
     expect(r.passfeld).toBeDefined()
   })
 
-  it('Anordnung: n = nReihen · nProReihe ≥ nErf, Teilung 3·d_P', () => {
+  it('Anordnung: Summe der Reihen ≥ nErf, Teilung 3·d_P', () => {
     const feld = berechnePassbolzenFeld(20000, 40, auf, ZUL_FAKTOREN.schwellend, S235)
     expect(feld.n).toBeGreaterThanOrEqual(feld.nErf)
+    expect(feld.reihen.reduce((a, b) => a + b, 0)).toBe(feld.n)
+    expect(feld.nReihen).toBe(feld.reihen.length)
     expect(feld.teilung).toBe(30)
     expect(feld.feldLaenge).toBeCloseTo((feld.nReihen - 1) * 30 + 40, 6)
+  })
+
+  it('Staffelung: Reihen wachsen zum Auge hin (letzte Reihe = Rest)', () => {
+    // breites Blech, dünnes Mittelblech → 1. Reihe eng begrenzt, danach mehr
+    const feld = berechnePassbolzenFeld(150000, 120, { tM: 8, tL: 6, dP: 12 }, ZUL_FAKTOREN.schwellend, S235)
+    // bis zur vorletzten Reihe monoton nicht abnehmend (letzte trägt den Rest)
+    for (let i = 1; i < feld.reihen.length - 1; i++) {
+      expect(feld.reihen[i]).toBeGreaterThanOrEqual(feld.reihen[i - 1])
+    }
+    // gestaffelt ist kürzer als einspaltig (n Reihen à 1)
+    expect(feld.nReihen).toBeLessThan(feld.nErf)
+    expect(feld.n).toBeGreaterThanOrEqual(feld.nErf)
   })
 
   it('zu dünnes Mittelblech → Nettozug an der 1. Reihe versagt', () => {
@@ -345,26 +359,24 @@ describe('Aufdopplung – Blechdicken-Nachweise', () => {
 })
 
 describe('Auslegung – Mittelblech ans Limit', () => {
-  it('t_M im 0,5-mm-Raster, Kontrolle besteht, hohe Ausnutzung', () => {
+  it('t_M exakt aus S = 1 (Ausnutzung ~100 %), Kontrolle besteht', () => {
     const r = legeBolzenAus({
       F: 100000, spalt: 0, einbaufall: 1, lastfall: 'schwellend',
       material: S235, aufdopplung: { tM: 0, tL: 0, dP: 16 },
     })
     const a = r.aufdopplung!
     expect(a.feld).toBeTruthy()
-    // 0,5-mm-Raster
-    expect((a.tM * 2) % 1).toBeCloseTo(0, 9)
     expect(r.kontrolle.bestanden).toBe(true)
-    // Mittelblech nahe am Limit: höchste Ausnutzung seiner Nachweise ≥ 80 %
+    // Mittelblech exakt am Limit: höchste Ausnutzung seiner Nachweise ≈ 100 %
     const mNamen = [
       'Zug Mittelblech (freie Länge)',
-      'Zug Mittelblech (1. Passbolzenreihe)',
+      'Zug Mittelblech (maßgebende Passbolzenreihe)',
       'Passbolzen – Lochleibung Mittelblech',
     ]
     const eta = Math.max(
       ...r.kontrolle.nachweise.filter((n) => mNamen.includes(n.name)).map((n) => n.vorhanden / n.zulaessig),
     )
-    expect(eta).toBeGreaterThanOrEqual(0.8)
+    expect(eta).toBeGreaterThanOrEqual(0.97)
     expect(eta).toBeLessThanOrEqual(1.0)
   })
 

@@ -87,11 +87,14 @@ export interface PassbolzenFeld {
   FL: number
   /** rechnerisch erforderliche Passbolzenanzahl */
   nErf: number
-  /** Bolzen je Reihe (quer zur Kraft) */
+  /** Bolzen je Reihe, gestaffelt: Reihe 1 (schaftseitig, wenige wegen
+   *  Nettozug bei voller Kraft) → letzte Reihe (augenseitig, viele) */
+  reihen: number[]
+  /** größte Bolzenzahl einer Reihe (Feldbreite) */
   nProReihe: number
   /** Anzahl Reihen (in Kraftrichtung) */
   nReihen: number
-  /** verbaute Bolzenanzahl = nReihen · nProReihe */
+  /** verbaute Bolzenanzahl = Summe der Reihen */
   n: number
   /** Lochabstand (Teilung) 3·d_P in mm */
   teilung: number
@@ -104,14 +107,18 @@ export interface PassbolzenFeld {
 }
 
 /**
- * Passbolzenfeld berechnen (optimale Aufteilung):
+ * Passbolzenfeld berechnen – gestaffelte Anordnung für eine möglichst kurze
+ * Lasche (Vorbild: genietete Zugstoß-Anschlüsse im Brückenbau):
  *  1. Laschenanteil F_L = F · 2·t_L / (t_M + 2·t_L) (Steifigkeitsverhältnis
  *     der Querschnitte, gleiche Breite und gleicher Werkstoff).
  *  2. Tragfähigkeit je Passbolzen = min(Abscherung zweischnittig,
  *     Lochleibung Mittelblech, Lochleibung Laschen) → n_erf.
- *  3. Bolzen je Reihe: so viele wie Breite (Teilung 3·d_P, Rand 1,5·d_P)
- *     und der Nettozug des Mittelblechs an der 1. Reihe (volle Kraft F!)
- *     zulassen; Reihenanzahl = aufrunden(n_erf / je Reihe).
+ *  3. Staffelung: Die 1. Reihe (schaftseitig) sieht das Mittelblech mit der
+ *     vollen Kraft F und darf nur wenige Löcher haben; jede weitere Reihe
+ *     hat mehr Restkraft abgegeben und darf mehr Bolzen tragen – bis zum
+ *     geometrischen Maximum der Breite (Teilung 3·d_P, Rand 1,5·d_P quer).
+ *     Auf der Laschenseite gilt das Gleiche spiegelbildlich (Kraft wächst
+ *     zum Auge hin). So wird das Feld so kurz wie möglich.
  */
 export function berechnePassbolzenFeld(
   F: number,
@@ -136,15 +143,57 @@ export function berechnePassbolzenFeld(
   const randLaengs = 2 * dP
   // geometrisch möglich je Reihe (Randabstand quer ≥ 1,5·d_P je Seite)
   const nGeo = Math.max(1, Math.floor((bS - teilung) / teilung) + 1)
-  // Nettozug des Mittelblechs an der 1. Reihe begrenzt die Lochzahl je Reihe:
-  // (b_S − k·d_P) · t_M · σ_z,zul ≥ F
-  const kZug = Math.floor((bS - F / (tM * sigZ)) / dP)
-  const nProReihe = Math.max(1, Math.min(nGeo, kZug, nErf))
-  const nReihen = Math.ceil(nErf / nProReihe)
-  const n = nReihen * nProReihe
+
+  // Staffel-Layout: je Reihe so viele Bolzen, wie Nettozug (Mittelblech mit
+  // Restkraft, Laschen mit bereits eingeleiteter Kraft) und Breite zulassen.
+  // Der Kraftabtrag je Bolzen (F_L/n) hängt von der Endanzahl ab → wenige
+  // Fixpunkt-Iterationen über n.
+  let reihen: number[] = [nErf]
+  let nTotal = nErf
+  for (let iter = 0; iter < 6; iter++) {
+    const dFproBolzen = FL / nTotal
+    const neu: number[] = []
+    let uebertragen = 0 // Bolzen vor der aktuellen Reihe
+    while (uebertragen < nErf && neu.length < 400) {
+      const FMittel = F - uebertragen * dFproBolzen // Restkraft Mittelblech
+      const kMittel = Math.floor((bS - FMittel / (tM * sigZ)) / dP)
+      const maxNoetig = nErf - uebertragen
+      let k = Math.max(1, Math.min(nGeo, kMittel, maxNoetig))
+      // Laschenseite: Kraft nach dieser Reihe (inkl. eigener Bolzen)
+      for (; k > 1; k--) {
+        const FLasche = Math.min((uebertragen + k) * dFproBolzen, FL)
+        if ((bS - k * dP) * 2 * tL * sigZ >= FLasche) break
+      }
+      neu.push(k)
+      uebertragen += k
+    }
+    const nNeu = neu.reduce((a, b) => a + b, 0)
+    reihen = neu
+    if (nNeu === nTotal) break
+    nTotal = nNeu
+  }
+  const n = reihen.reduce((a, b) => a + b, 0)
+  const nReihen = reihen.length
+  const nProReihe = Math.max(...reihen)
   const feldLaenge = (nReihen - 1) * teilung + 2 * randLaengs
 
-  const netM = Math.max(bS - nProReihe * dP, 0)
+  // Maßgebende Reihe je Blech: Mittelblech trägt vor Reihe i noch die
+  // Restkraft (Reihe 1 = volle F), die Laschen nach Reihe i die bereits
+  // eingeleitete Kraft (letzte Reihe = volle F_L). Kritisch ist jeweils die
+  // Reihe mit dem höchsten Verhältnis Kraft/Nettoquerschnitt.
+  let cum = 0
+  let mMax = { sigma: 0, i: 0, Fk: F, net: Math.max(bS - reihen[0] * dP, 0) }
+  let lMax = { sigma: 0, i: 0, Fk: FL, net: Math.max(bS - reihen[nReihen - 1] * dP, 0) }
+  for (let i = 0; i < nReihen; i++) {
+    const net = bS - reihen[i] * dP
+    const FRest = F - cum * (FL / n)
+    const sigM = net > 0 ? FRest / (net * tM) : Infinity
+    if (sigM > mMax.sigma) mMax = { sigma: sigM, i, Fk: FRest, net: Math.max(net, 0) }
+    cum += reihen[i]
+    const FLk = Math.min(cum * (FL / n), FL)
+    const sigL = net > 0 ? FLk / (net * 2 * tL) : Infinity
+    if (sigL > lMax.sigma) lMax = { sigma: sigL, i, Fk: FLk, net: Math.max(net, 0) }
+  }
   const nachweise: Nachweis[] = [
     nachweis(
       'Passbolzen – Abscherung',
@@ -168,22 +217,22 @@ export function berechnePassbolzenFeld(
       pZul,
     ),
     nachweis(
-      'Zug Mittelblech (1. Passbolzenreihe)',
-      `σ_z = F / ((b_S − ${nProReihe}·d_P) · t_M)`,
-      `${fmt(F)} / (${fmt(netM)} · ${fmt(tM)})`,
-      netM > 0 ? F / (netM * tM) : Infinity,
+      'Zug Mittelblech (maßgebende Passbolzenreihe)',
+      `σ_z = F_${mMax.i + 1} / ((b_S − ${reihen[mMax.i]}·d_P) · t_M) ,  Reihe ${mMax.i + 1}`,
+      `${fmt(mMax.Fk)} / (${fmt(mMax.net)} · ${fmt(tM)})`,
+      mMax.sigma,
       sigZ,
     ),
     nachweis(
-      'Zug Laschen (Passbolzenreihe)',
-      `σ_z = F_L / ((b_S − ${nProReihe}·d_P) · 2·t_L)`,
-      `${fmt(FL)} / (${fmt(netM)} · ${fmt(2 * tL)})`,
-      netM > 0 ? FL / (netM * 2 * tL) : Infinity,
+      'Zug Laschen (maßgebende Passbolzenreihe)',
+      `σ_z = F_L,${lMax.i + 1} / ((b_S − ${reihen[lMax.i]}·d_P) · 2·t_L) ,  Reihe ${lMax.i + 1}`,
+      `${fmt(lMax.Fk)} / (${fmt(lMax.net)} · ${fmt(2 * tL)})`,
+      lMax.sigma,
       sigZ,
     ),
   ]
 
-  return { FL, nErf, nProReihe, nReihen, n, teilung, randLaengs, feldLaenge, nachweise }
+  return { FL, nErf, reihen, nProReihe, nReihen, n, teilung, randLaengs, feldLaenge, nachweise }
 }
 
 /** Optionale Buchse(n) in den Bohrungen – getrennt für Stange und Gabel. */
@@ -539,7 +588,7 @@ export interface MindestMasse {
   /** erforderlicher Randabstand Gabel (je Lasche) aus Ausreißen in mm */
   cGmin: number
   /** Aufdopplung: erforderliche Mittelblechdicke (Vollquerschnitt freie
-   *  Länge + Nettozug an der 1. Passbolzenreihe) in mm */
+   *  Länge + Nettozug an der maßgebenden Passbolzenreihe) in mm */
   tMmin?: number
   /** Aufdopplung: erforderliche Laschendicke je Seite (Rest zum Paket aus
    *  Lochleibung, mit aktuellem t_M) in mm */
@@ -575,11 +624,16 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
     const { bS } = input
     // Vollquerschnitt über die freie Länge …
     let tMerf = F / (bS * sigmaZ)
-    // … und Nettozug an der 1. Passbolzenreihe (volle Kraft F, Lochabzug
+    // … und Nettozug an der maßgebenden Passbolzenreihe (Restkraft, Lochabzug
     // mit der Reihenbelegung der aktuellen Konfiguration)
     const feld = berechnePassbolzenFeld(F, bS, auf, faktoren, material)
-    const netto = bS - feld.nProReihe * auf.dP
-    if (netto > 0) tMerf = Math.max(tMerf, F / (netto * sigmaZ))
+    let cum = 0
+    for (let i = 0; i < feld.reihen.length; i++) {
+      const netto = bS - feld.reihen[i] * auf.dP
+      const FRest = F - cum * (feld.FL / feld.n)
+      if (netto > 0) tMerf = Math.max(tMerf, FRest / (netto * sigmaZ))
+      cum += feld.reihen[i]
+    }
     tMmin = round(tMerf)
     // Laschen: Rest zum erforderlichen Paket (Lochleibung am Auge), mit
     // aktuellem t_M
@@ -715,27 +769,48 @@ export function legeBolzenAus(
 
   // ---- Aufdopplung: optimale Aufteilung des Pakets t_S in t_M + 2·t_L ----
   // Das Mittelblech ist der Kostentreiber (volle Bauteillänge!) und wird
-  // deshalb ans Limit gelegt: Start am Zug-Minimum des Vollquerschnitts
-  // (F/(b_S·σ_z)) im 0,5-mm-Raster, erhöht nur, wenn das Passbolzenfeld
-  // (v. a. Nettozug an der 1. Reihe, volle Kraft F) es erzwingt. Die
+  // exakt auf Sicherheit S = 1 gelegt: Fixpunkt-Iteration über das
+  // erforderliche t_M aus allen Mittelblech-Bedingungen des jeweils
+  // resultierenden (gestaffelten) Passbolzenfelds — Vollquerschnitt der
+  // freien Länge, Nettozug an der 1. Reihe und Lochleibung. Die
   // Dickenreserve steckt in den kurzen, günstigen Laschen.
   let aufdopplungOut: AuslegungErgebnis['aufdopplung'] = null
   let aufCfg: AufdopplungConfig | null = null
   if (input.aufdopplung) {
     const dP = input.aufdopplung.dP
     const tPaket = tS
-    const step = 0.5
-    const aufStep = (x: number) => Math.ceil(x / step - 1e-9) * step
-    let tM = Math.max(2, aufStep(F / (bS * sigZ)))
+    const pZulF = fak.cP * material.Rm
+    let tM = F / (bS * sigZ) // exaktes Limit des Vollquerschnitts (S = 1)
     let tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
     let feld: PassbolzenFeld | null = null
-    for (let i = 0; i < 2000 && tL > 0; i++) {
-      feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material)
-      if (feld.nachweise.every((n) => n.erfuellt)) break
-      tM += step
+    for (let i = 0; i < 80 && tL > 0; i++) {
+      const kand = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material)
+      // maßgebendes t_M dieses Layouts (S = 1 je Bedingung): Vollquerschnitt,
+      // Nettozug der maßgebenden Reihe (Restkraft!) und Lochleibung
+      let cum = 0
+      let tMNetto = 0
+      for (let k = 0; k < kand.reihen.length; k++) {
+        const net = bS - kand.reihen[k] * dP
+        const FRest = F - cum * (kand.FL / kand.n)
+        tMNetto = Math.max(tMNetto, net > 0 ? FRest / (net * sigZ) : Infinity)
+        cum += kand.reihen[k]
+      }
+      const tMerf = Math.max(
+        F / (bS * sigZ),
+        tMNetto,
+        kand.FL / (kand.n * dP * pZulF),
+      )
+      if (tMerf <= tM + 1e-9 && kand.nachweise.every((n) => n.erfuellt)) {
+        feld = kand
+        break
+      }
+      tM = Number.isFinite(tMerf) ? Math.max(tMerf, tM + 0.05) : tM + 1
       tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
       feld = null
     }
+    // auf 0,01 mm aufrunden, damit S ≥ 1 sicher bleibt
+    tM = Math.ceil(tM * 100 - 1e-6) / 100
+    if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material)
     if (tL <= 0) {
       // Mittelblech braucht ohnehin die volle Paketdicke → Laschen unnötig
       aufdopplungOut = { tM: tPaket, tL: 0, feld: null }
