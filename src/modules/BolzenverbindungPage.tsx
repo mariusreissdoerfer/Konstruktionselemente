@@ -450,8 +450,8 @@ export function BolzenverbindungPage() {
             aufdopplung={anzeigeAuf}
             buchseStangeDa={buchseOn && buchseOrt !== 'gabel' ? buchseDaS : null}
             buchseGabelDa={buchseOn && buchseOrt !== 'stange' ? buchseDaG : null}
-            buchseLenStange={buchseOn && buchseOrt !== 'gabel' ? lenS : null}
-            buchseLenGabel={buchseOn && buchseOrt !== 'stange' ? lenG : null}
+            buchseLenStange={buchseOn && buchseOrt !== 'gabel' ? (aus && buchseLenGleichT ? anzeigeTS : lenS) : null}
+            buchseLenGabel={buchseOn && buchseOrt !== 'stange' ? (aus && buchseLenGleichT ? anzeigeTG : lenG) : null}
             onEditDim={aus ? undefined : handleEditDim}
             versagen={versagen}
           />

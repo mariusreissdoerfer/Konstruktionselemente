@@ -622,11 +622,17 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   const sigmaZ = faktoren.cZug * material.Rm
 
   const ort = buchse?.ort ?? 'beide'
-  const dLochS = buchse && (ort === 'beide' || ort === 'stange') ? buchse.daStange : d
-  const dLochG = buchse && (ort === 'beide' || ort === 'gabel') ? buchse.daGabel : d
+  const buchseS = buchse && (ort === 'beide' || ort === 'stange')
+  const buchseG = buchse && (ort === 'beide' || ort === 'gabel')
+  const dLochS = buchseS && buchse ? buchse.daStange : d
+  const dLochG = buchseG && buchse ? buchse.daGabel : d
 
   const round = (x: number) => Math.round(x * 100) / 100
-  const tSmin = F / (d * pZul)
+  // Lochleibung: mit Buchse zählt außen d_a gegen das Blech (innen trägt die
+  // Buchsenlänge, nicht die Blechdicke) – wie in der Auslegung
+  const pKon = (a: Material, b: Material) => faktoren.cP * Math.min(a.Rm, b.Rm)
+  const tSmin = buchseS && buchse ? F / (buchse.daStange * pKon(buchse.material, material)) : F / (d * pZul)
+  const tGmin = buchseG && buchse ? F / (2 * buchse.daGabel * pKon(buchse.material, material)) : F / (2 * d * pZul)
 
   // Aufdopplung: Mindestdicken für Mittelblech und Laschen
   let tMmin: number | undefined
@@ -653,7 +659,7 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
 
   return {
     tSmin: round(tSmin),
-    tGmin: round(F / (2 * d * pZul)),
+    tGmin: round(tGmin),
     bSmin: round(dLochS + F / (tS * sigmaZ)),
     bGmin: round(dLochG + F / (2 * tG * sigmaZ)),
     cSmin: round(randAbstandErf(F, tS, dLochS, 2, faktoren, material)),
@@ -752,90 +758,109 @@ export function legeBolzenAus(
 
   const dAbscherung = Math.sqrt((2 * F) / (Math.PI * tauZul))
 
-  // iterativ konsistente Dicken und Durchmesser
-  let d = naechsterNorm(dAbscherung)
-  let tS = 1
-  let tG = 1
-  for (let k = 0; k < 25; k++) {
-    tS = Math.ceil(tSmin(d))
-    tG = Math.ceil(tGmin(d))
-    const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
-    const dBiegung = Math.cbrt((32 * Mb) / (Math.PI * sigB))
-    const dNorm = naechsterNorm(Math.max(dAbscherung, dBiegung))
-    if (dNorm <= d) break
-    d = dNorm
-  }
-
-  // maßgebender Nachweis für d (mit finalen Dicken)
-  const MbF = biegemoment(F, tS, tG, spalt, einbaufall)
-  const dBiegungF = Math.cbrt((32 * MbF) / (Math.PI * sigB))
-  const massgebend = dBiegungF >= dAbscherung ? 'Biegung' : 'Abscherung'
-  const dErf = Math.max(dAbscherung, dBiegungF)
-
-  // Zug → erforderliche Breiten (mit finalen Dicken und d)
-  const dLochS = bStange && buchse ? buchse.daStange : d
-  const dLochG = bGabel && buchse ? buchse.daGabel : d
-  const bS = Math.ceil(dLochS + F / (tS * sigZ))
-  const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
-
-  // Ausreißen → erforderliche Randabstände in Kraftrichtung (Scherausriss)
-  const cS = Math.ceil(randAbstandErf(F, tS, dLochS, 2, fak, material))
-  const cG = Math.ceil(randAbstandErf(F, tG, dLochG, 4, fak, material))
-
-  // ---- Aufdopplung: optimale Aufteilung des Pakets t_S in t_M + 2·t_L ----
-  // Das Mittelblech ist der Kostentreiber (volle Bauteillänge!) und wird
-  // exakt auf Sicherheit S = 1 gelegt: Fixpunkt-Iteration über das
-  // erforderliche t_M aus allen Mittelblech-Bedingungen des jeweils
-  // resultierenden (gestaffelten) Passbolzenfelds — Vollquerschnitt der
-  // freien Länge, Nettozug an der 1. Reihe und Lochleibung. Die
-  // Dickenreserve steckt in den kurzen, günstigen Laschen.
-  let aufdopplungOut: AuslegungErgebnis['aufdopplung'] = null
-  let aufCfg: AufdopplungConfig | null = null
-  if (input.aufdopplung) {
-    const dP = input.aufdopplung.dP
-    const tPaket = tS
-    const pZulF = fak.cP * Math.min(material.Rm, matBolzen.Rm)
-    let tM = F / (bS * sigZ) // exaktes Limit des Vollquerschnitts (S = 1)
-    let tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
-    let feld: PassbolzenFeld | null = null
-    for (let i = 0; i < 80 && tL > 0; i++) {
-      const kand = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
-      // maßgebendes t_M dieses Layouts (S = 1 je Bedingung): Vollquerschnitt,
-      // Nettozug der maßgebenden Reihe (Restkraft!) und Lochleibung
-      let cum = 0
-      let tMNetto = 0
-      for (let k = 0; k < kand.reihen.length; k++) {
-        const net = bS - kand.reihen[k] * dP
-        const FRest = F - cum * (kand.FL / kand.n)
-        tMNetto = Math.max(tMNetto, net > 0 ? FRest / (net * sigZ) : Infinity)
-        cum += kand.reihen[k]
-      }
-      const tMerf = Math.max(
-        F / (bS * sigZ),
-        tMNetto,
-        kand.FL / (kand.n * dP * pZulF),
-      )
-      if (tMerf <= tM + 1e-9 && kand.nachweise.every((n) => n.erfuellt)) {
-        feld = kand
-        break
-      }
-      tM = Number.isFinite(tMerf) ? Math.max(tMerf, tM + 0.05) : tM + 1
-      tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
-      feld = null
+  // Die Auslegung wird als Ganzes wiederholt, falls die Endkontrolle knapp
+  // scheitert (z. B. weil die Aufdopplung das Paket durch Aufrunden von t_L
+  // minimal über das ausgelegte t_S hebt und damit das Biegemoment wächst):
+  // dann wird der Durchmesser eine Normstufe angehoben und alles neu bemessen.
+  let dMinNorm = 0
+  for (let versuch = 0; ; versuch++) {
+    // iterativ konsistente Dicken und Durchmesser
+    let d = Math.max(naechsterNorm(dAbscherung), dMinNorm)
+    let tS = 1
+    let tG = 1
+    for (let k = 0; k < 25; k++) {
+      tS = Math.ceil(tSmin(d))
+      tG = Math.ceil(tGmin(d))
+      const Mb = biegemoment(F, tS, tG, spalt, einbaufall)
+      const dBiegung = Math.cbrt((32 * Mb) / (Math.PI * sigB))
+      const dNorm = Math.max(naechsterNorm(Math.max(dAbscherung, dBiegung)), dMinNorm)
+      if (dNorm <= d) break
+      d = dNorm
     }
-    // auf 0,01 mm aufrunden, damit S ≥ 1 sicher bleibt
-    tM = Math.ceil(tM * 100 - 1e-6) / 100
-    if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
-    if (tL <= 0) {
-      // Mittelblech braucht ohnehin die volle Paketdicke → Laschen unnötig
-      aufdopplungOut = { tM: tPaket, tL: 0, feld: null }
-    } else {
-      aufCfg = { tM, tL, dP }
-      aufdopplungOut = { tM, tL, feld }
+
+    // maßgebender Nachweis für d (mit finalen Dicken)
+    const MbF = biegemoment(F, tS, tG, spalt, einbaufall)
+    const dBiegungF = Math.cbrt((32 * MbF) / (Math.PI * sigB))
+    const massgebend = dBiegungF >= dAbscherung ? 'Biegung' : 'Abscherung'
+    const dErf = Math.max(dAbscherung, dBiegungF)
+
+    // Zug → erforderliche Breiten (mit finalen Dicken und d)
+    const dLochS = bStange && buchse ? buchse.daStange : d
+    const dLochG = bGabel && buchse ? buchse.daGabel : d
+    const bS = Math.ceil(dLochS + F / (tS * sigZ))
+    const bG = Math.ceil(dLochG + F / (2 * tG * sigZ))
+
+    // Ausreißen → erforderliche Randabstände in Kraftrichtung (Scherausriss)
+    const cS = Math.ceil(randAbstandErf(F, tS, dLochS, 2, fak, material))
+    const cG = Math.ceil(randAbstandErf(F, tG, dLochG, 4, fak, material))
+
+    // ---- Aufdopplung: optimale Aufteilung des Pakets t_S in t_M + 2·t_L ----
+    // Das Mittelblech ist der Kostentreiber (volle Bauteillänge!) und wird
+    // exakt auf Sicherheit S = 1 gelegt: Fixpunkt-Iteration über das
+    // erforderliche t_M aus allen Mittelblech-Bedingungen des jeweils
+    // resultierenden (gestaffelten) Passbolzenfelds — Vollquerschnitt der
+    // freien Länge, Nettozug der maßgebenden Reihe und Lochleibung. Die
+    // Dickenreserve steckt in den kurzen, günstigen Laschen.
+    let aufdopplungOut: AuslegungErgebnis['aufdopplung'] = null
+    let aufCfg: AufdopplungConfig | null = null
+    if (input.aufdopplung) {
+      const dP = input.aufdopplung.dP
+      const tPaket = tS
+      const pZulF = fak.cP * Math.min(material.Rm, matBolzen.Rm)
+      let tM = F / (bS * sigZ) // exaktes Limit des Vollquerschnitts (S = 1)
+      let tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
+      let feld: PassbolzenFeld | null = null
+      for (let i = 0; i < 80 && tL > 0; i++) {
+        const kand = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
+        // maßgebendes t_M dieses Layouts (S = 1 je Bedingung): Vollquerschnitt,
+        // Nettozug der maßgebenden Reihe (Restkraft!) und Lochleibung
+        let cum = 0
+        let tMNetto = 0
+        for (let k = 0; k < kand.reihen.length; k++) {
+          const net = bS - kand.reihen[k] * dP
+          const FRest = F - cum * (kand.FL / kand.n)
+          tMNetto = Math.max(tMNetto, net > 0 ? FRest / (net * sigZ) : Infinity)
+          cum += kand.reihen[k]
+        }
+        const tMerf = Math.max(
+          F / (bS * sigZ),
+          tMNetto,
+          kand.FL / (kand.n * dP * pZulF),
+        )
+        if (tMerf <= tM + 1e-9 && kand.nachweise.every((n) => n.erfuellt)) {
+          feld = kand
+          break
+        }
+        tM = Number.isFinite(tMerf) ? Math.max(tMerf, tM + 0.05) : tM + 1
+        tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
+        feld = null
+      }
+      // auf 0,01 mm aufrunden, damit S ≥ 1 sicher bleibt
+      tM = Math.ceil(tM * 100 - 1e-6) / 100
+      if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
+      if (tL <= 0) {
+        // Mittelblech braucht ohnehin die volle Paketdicke → Laschen unnötig
+        aufdopplungOut = { tM: tPaket, tL: 0, feld: null }
+      } else {
+        aufCfg = { tM, tL, dP }
+        aufdopplungOut = { tM, tL, feld }
+        // tatsächliche Paketdicke (t_L aufgerundet) als t_S ausweisen
+        tS = tM + 2 * tL
+      }
     }
+
+    // Kontrolle: Die Buchsenlänge wächst mit der ausgelegten Blechdicke mit
+    // (Annahme der Dickenformeln oben: Buchsenlänge = Blechdicke)
+    const kontrolle = berechneBolzen({
+      ...input, d, tS, tG, bS, bG, cS, cG, aufdopplung: aufCfg,
+      buchse: buchse
+        ? { ...buchse, laengeStange: Math.max(buchse.laengeStange, tS), laengeGabel: Math.max(buchse.laengeGabel, tG) }
+        : null,
+    })
+
+    if (kontrolle.bestanden || versuch >= 3 || d >= NORM_DURCHMESSER[NORM_DURCHMESSER.length - 1]) {
+      return { d, tS, tG, bS, bG, cS, cG, dErf: round(dErf, 2), massgebend, kontrolle, aufdopplung: aufdopplungOut }
+    }
+    dMinNorm = naechsterNorm(d + 1)
   }
-
-  const kontrolle = berechneBolzen({ ...input, d, tS, tG, bS, bG, cS, cG, aufdopplung: aufCfg })
-
-  return { d, tS, tG, bS, bG, cS, cG, dErf: round(dErf, 2), massgebend, kontrolle, aufdopplung: aufdopplungOut }
 }

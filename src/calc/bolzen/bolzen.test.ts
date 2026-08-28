@@ -429,3 +429,49 @@ describe('Getrennte Werkstoffe Bolzen/Blech', () => {
     expect(hart.kontrolle.bestanden).toBe(true)
   })
 })
+
+describe('Plausibilität – Eigenschaften der Auslegung', () => {
+  const S355 = MATERIAL_BY_ID.get('S355JR')!
+  const CrMo = MATERIAL_BY_ID.get('42CrMo4')!
+
+  it('Fuzz 100: Auslegung besteht ihre Kontrolle (inkl. Buchse/Aufdopplung)', () => {
+    let seed = 7777
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+    const mats = [S355, S235, CrMo]
+    for (let i = 0; i < 100; i++) {
+      const F = 3000 + rnd() * 9e6
+      const einbaufall = ([1, 2, 3] as const)[Math.floor(rnd() * 3)]
+      const lastfall = (['ruhend', 'schwellend', 'wechselnd'] as const)[Math.floor(rnd() * 3)]
+      const material = mats[Math.floor(rnd() * 3)]
+      const bolzenMaterial = mats[Math.floor(rnd() * 3)]
+      const aufd = rnd() < 0.5 ? { tM: 0, tL: 0, dP: 6 + Math.floor(rnd() * 90) } : null
+      let buchse = null
+      if (rnd() < 0.4) {
+        const probe = legeBolzenAus({ F, spalt: 0, einbaufall, lastfall, material, bolzenMaterial, aufdopplung: aufd })
+        buchse = {
+          daStange: Math.round(probe.d * (1.2 + rnd() * 0.3)),
+          daGabel: Math.round(probe.d * (1.1 + rnd() * 0.3)),
+          laengeStange: probe.tS, laengeGabel: probe.tG,
+          material: CuSn8, ort: 'beide' as const,
+        }
+      }
+      const r = legeBolzenAus({ F, spalt: Math.floor(rnd() * 60), einbaufall, lastfall, material, bolzenMaterial, buchse, aufdopplung: aufd })
+      expect(r.kontrolle.bestanden, `Fall ${i}: F=${Math.round(F)} EF=${einbaufall} ${lastfall} ${material.id}/${bolzenMaterial.id}`).toBe(true)
+    }
+  })
+
+  it('größere Kraft → größerer erforderlicher Durchmesser', () => {
+    const d1 = legeBolzenAus({ F: 50000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S355 }).dErf
+    const d2 = legeBolzenAus({ F: 200000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S355 }).dErf
+    expect(d2).toBeGreaterThan(d1)
+  })
+
+  it('Aufdopplung mit Paket = t_S liefert identische Auge-Nachweise', () => {
+    const ohne = berechneBolzen({ ...base, tS: 20 })
+    const mit = berechneBolzen({ ...base, aufdopplung: { tM: 10, tL: 5, dP: 8 } })
+    for (const name of ['Lochleibung Stange', 'Zug Stange', 'Ausreißen Stange', 'Biegung', 'Abscherung (zweischnittig)']) {
+      expect(mit.nachweise.find((n) => n.name === name)!.vorhanden).toBeCloseTo(
+        ohne.nachweise.find((n) => n.name === name)!.vorhanden, 6)
+    }
+  })
+})
