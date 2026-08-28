@@ -107,16 +107,16 @@ export function BolzenverbindungPage() {
   const [anordnung, setAnordnung] = useLocalStorage<'gerade' | 'knie'>('ke.bolzen.anordnung', 'gerade')
   const knie = anordnung === 'knie'
   const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
-  const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S235JR')
+  const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', '42CrMo4')
 
   // Optionen – Aufdopplung der Stange (Mittelblech + Laschen + Passbolzen)
-  const [aufOn, setAufOn] = useLocalStorage('ke.bolzen.aufOn', false)
+  const [aufOn, setAufOn] = useLocalStorage('ke.bolzen.aufOn', true)
   const [aufTM, setAufTM] = useLocalStorage('ke.bolzen.aufTM', 118)
   const [aufTL, setAufTL] = useLocalStorage('ke.bolzen.aufTL', 59)
   const [aufDP, setAufDP] = useLocalStorage('ke.bolzen.aufDP', 80)
 
   // Optionen – Buchsen
-  const [buchseOn, setBuchseOn] = useLocalStorage('ke.bolzen.buchseOn', false)
+  const [buchseOn, setBuchseOn] = useLocalStorage('ke.bolzen.buchseOn', true)
   const [buchseDaS, setBuchseDaS] = useLocalStorage('ke.bolzen.buchseDaS', 480)
   const [buchseDaG, setBuchseDaG] = useLocalStorage('ke.bolzen.buchseDaG', 392)
   const [buchseLenGleichT, setBuchseLenGleichT] = useLocalStorage('ke.bolzen.buchseLenGleichT', true)
