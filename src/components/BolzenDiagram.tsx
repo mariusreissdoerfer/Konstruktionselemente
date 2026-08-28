@@ -141,6 +141,10 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const sideLeft = knie ? 78 : 30 // links Platz für c_G/b_S-Maße beim Knie
   const sideCRight = 96 // Platz rechts für die c-Maße
   const stemThk = Math.max(Math.min(wG, wS) * 0.6, 8) // Dicke des Stangenstiels
+  // Bei Aufdopplung ist die Stange ein Blechzuschnitt konstanter Breite:
+  // das Mittelblech läuft in voller Stegbreite b_S weiter (Rechenannahme
+  // der Mittelblech-Nachweise), kein schmaler Stiel.
+  const rodStemW = auf ? wS : stemThk
   const sideCx = sideLeft + wOuter / 2
   const rp = dp / 2
 
@@ -256,12 +260,12 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         {/* Stange: Auge + Stiel (gerade: nach unten · Knie: nach rechts) */}
         {knie ? (
           <>
-            <rect x={sideCx} y={cy - stemThk / 2} width={stStemEndX - sideCx} height={stemThk} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+            <rect x={sideCx} y={cy - rodStemW / 2} width={stStemEndX - sideCx} height={rodStemW} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
             <rect x={sideCx - sEyeW / 2} y={cy - sEyeH / 2} width={sEyeW} height={sEyeH} rx={Math.min(sEyeW, sEyeH) / 2} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
           </>
         ) : (
           <>
-            <rect x={sideCx - stemThk / 2} y={cy} width={stemThk} height={sideShaftBottom - cy} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+            <rect x={sideCx - rodStemW / 2} y={cy} width={rodStemW} height={sideShaftBottom - cy} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
             <rect x={sideCx - wS / 2} y={cy - ehS / 2} width={wS} height={ehS} rx={Math.min(wS, ehS) / 2} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
           </>
         )}

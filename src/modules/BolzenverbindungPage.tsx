@@ -352,9 +352,10 @@ export function BolzenverbindungPage() {
             <div className="space-y-3 border-l-2 border-indigo-300 pl-3">
               <NumberInput label="Passbolzen-⌀" symbol="d_P" unit="mm" value={aufDP} onChange={setAufDP} min={3} max={100} step={1} />
               <p className="text-[11px] leading-snug text-slate-500">
-                Mittelblech trägt den Zug über die freie Länge; am Auge doppeln
-                beidseitige Laschen auf. Der Laschenanteil wird auf der Zugseite
-                über ein Passbolzenfeld eingeleitet (Anordnung wird automatisch
+                Mittelblech (Breite = Stegbreite b_S, Blechzuschnitt) trägt den
+                Zug über die freie Länge; am Auge doppeln beidseitige Laschen
+                auf. Der Laschenanteil wird auf der Zugseite über ein
+                Passbolzenfeld eingeleitet (Anordnung wird automatisch
                 bestimmt: Teilung 3·d_P, Rand 2·d_P).
                 {modus === 'auslegung' && ' Die Aufteilung t_M/t_L wird in der Auslegung optimal bestimmt.'}
               </p>
