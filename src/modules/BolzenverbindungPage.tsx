@@ -117,6 +117,7 @@ export function BolzenverbindungPage() {
   const [aufTM, setAufTM] = useLocalStorage('ke.bolzen.aufTM', 118)
   const [aufTL, setAufTL] = useLocalStorage('ke.bolzen.aufTL', 59)
   const [aufDP, setAufDP] = useLocalStorage('ke.bolzen.aufDP', 80)
+  const [aufOpt, setAufOpt] = useLocalStorage<'material' | 'lasche'>('ke.bolzen.aufOpt', 'material')
 
   // Optionen – Buchsen
   const [buchseOn, setBuchseOn] = useLocalStorage('ke.bolzen.buchseOn', true)
@@ -187,6 +188,7 @@ export function BolzenverbindungPage() {
     bolzenMaterial,
     methode,
     fb: gelenkFb,
+    optimierung: aufOpt,
     buchse,
     aufdopplung,
   }
@@ -194,13 +196,13 @@ export function BolzenverbindungPage() {
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, methode, gelenkFb, buchse, aufOn, aufTM, aufTL, aufDP],
+    [F, d, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, methode, gelenkFb, aufOpt, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, methode, gelenkFb, buchse, aufOn, aufTM, aufTL, aufDP],
+    [F, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, bolzenMaterial, methode, gelenkFb, aufOpt, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
@@ -395,6 +397,15 @@ export function BolzenverbindungPage() {
           {aufOn && (
             <div className="space-y-3 border-l-2 border-indigo-300 pl-3">
               <NumberInput label="Passbolzen-⌀" symbol="d_P" unit="mm" value={aufDP} onChange={setAufDP} min={3} max={100} step={1} />
+              <SelectInput<'material' | 'lasche'>
+                label="Optimierungsziel Auslegung"
+                value={aufOpt}
+                onChange={setAufOpt}
+                options={[
+                  { value: 'material', label: 'Material Stange minimal (b_S·t_M)' },
+                  { value: 'lasche', label: 'Kurze Lasche (bis +40 % t_M)' },
+                ]}
+              />
               <p className="text-[11px] leading-snug text-slate-500">
                 Mittelblech (Breite = Stegbreite b_S, Blechzuschnitt) trägt den
                 Zug über die freie Länge; am Auge doppeln beidseitige Laschen
@@ -556,8 +567,11 @@ export function BolzenverbindungPage() {
               const ersparnis = 1 - auslegung.aufdopplung!.tM / auslegung.tS
               return (
                 <p className="mt-2 text-xs text-slate-500">
-                  Mittelblech ans Limit gelegt (max. +40 % für kurze Lasche):
+                  {aufOpt === 'material'
+                    ? 'Mittelblech aufs Minimum gelegt (Ziel: Material Stange): '
+                    : 'Mittelblech ans Limit gelegt (max. +40 % für kurze Lasche): '}
                   Ausnutzung <span className="font-semibold text-slate-700">{fmt(100 * eta, 0)} %</span> ·
+                  Stangen-Querschnitt <span className="font-semibold text-sky-700">b_S·t_M = {fmt(Math.round(auslegung.bS * auslegung.aufdopplung!.tM))} mm²</span> ·
                   Querschnitt der freien Länge <span className="font-semibold text-emerald-600">−{fmt(100 * ersparnis, 0)} %</span> gegenüber
                   durchgehender Paketdicke ({fmt(auslegung.aufdopplung!.tM)} statt {fmt(auslegung.tS)} mm).
                 </p>

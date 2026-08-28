@@ -666,3 +666,26 @@ describe('Gelenklager – Lagerbreite C als Mindestmaß', () => {
     expect(m.tSmin).toBeGreaterThanOrEqual(135)
   })
 })
+
+describe('Optimierungsziel der Auslegung', () => {
+  const S355_100 = MATERIAL_BY_ID.get('S355J2_100')!
+  const CrMo = MATERIAL_BY_ID.get('42CrMo4')!
+  const Ring = MATERIAL_BY_ID.get('LagerStahl')!
+  const basis = {
+    F: 6125000, spalt: 40, einbaufall: 2 as const, lastfall: 'schwellend' as const,
+    material: S355_100, bolzenMaterial: CrMo, methode: 'schaeffler' as const, fb: 2.75,
+    buchse: { daStange: 480, daGabel: 392, laengeStange: 135, laengeGabel: 118, material: Ring, ort: 'stange' as const, gelenk: { C0r: 23800000, fb: 2.75, breite: 135 } },
+    aufdopplung: { tM: 0, tL: 0, dP: 80 },
+  }
+
+  it("Default 'material': minimale Stangenfläche, Kontrolle besteht", () => {
+    const mat = legeBolzenAus(basis) // Default = material
+    const las = legeBolzenAus({ ...basis, optimierung: 'lasche' })
+    expect(mat.aufdopplung!.tM).toBeLessThanOrEqual(las.aufdopplung!.tM)
+    expect(mat.bS * mat.aufdopplung!.tM).toBeLessThanOrEqual(las.bS * las.aufdopplung!.tM)
+    expect(mat.kontrolle.bestanden).toBe(true)
+    expect(las.kontrolle.bestanden).toBe(true)
+    // dafür ist die Lasche bei 'lasche' höchstens so lang wie bei 'material'
+    expect(las.aufdopplung!.feld!.feldLaenge).toBeLessThanOrEqual(mat.aufdopplung!.feld!.feldLaenge)
+  })
+})

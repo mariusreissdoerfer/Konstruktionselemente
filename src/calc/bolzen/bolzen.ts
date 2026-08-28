@@ -313,6 +313,11 @@ export interface BolzenInput {
   methode?: 'rm' | 'schaeffler'
   /** Belastungsfaktor f_b der Schaeffler-Methode (Default 2,75, schwellend) */
   fb?: number
+  /** Optimierungsziel der Auslegung bei Aufdopplung (Default 'material'):
+   *  - 'material': minimale Stangen-Querschnittsfläche b_S·t_M — das
+   *    Mittelblech läuft über die volle Länge, hier liegt das Material
+   *  - 'lasche': kürzestes Passbolzenfeld, dafür bis +40 % t_M */
+  optimierung?: 'material' | 'lasche'
   /** optionale Buchse */
   buchse?: BuchseConfig | null
   /** optionale Aufdopplung der Stange (dann gilt t_S = t_M + 2·t_L) */
@@ -930,13 +935,13 @@ export function legeBolzenAus(
       tM = Math.ceil(tM * 100 - 1e-6) / 100
       if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen, schaeffler ? sigKerb : undefined)
 
-      // Kurze Lasche bevorzugen: Am exakten t_M-Limit erlaubt der Nettozug
+      // Optimierungsziel 'lasche': Am exakten t_M-Limit erlaubt der Nettozug
       // in den ersten Reihen oft nur 1 Bolzen → langes Feld. Wir erlauben
       // bis zu +40 % Mittelblechdicke, wenn das die Reihen verbreitert und
-      // die Lasche (Feldlänge) verkürzt — lieber in die Breite als in die
-      // Länge. Gewählt wird die kürzeste Lasche, bei Gleichstand das
-      // dünnste Mittelblech.
-      if (tL > 0 && feld) {
+      // die Lasche (Feldlänge) verkürzt. Beim Default 'material' bleibt
+      // t_M am Minimum — die Stangen-Querschnittsfläche b_S·t_M (volle
+      // Bauteillänge!) hat Vorrang vor der Laschenlänge.
+      if (tL > 0 && feld && input.optimierung === 'lasche') {
         let best = { tM, tL, feld }
         const tMBase = tM
         const nGeoQuer = Math.max(1, Math.floor((bS - 2 * 1.5 * dP) / (2.4 * dP)) + 1)
