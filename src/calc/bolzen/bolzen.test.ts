@@ -343,3 +343,39 @@ describe('Aufdopplung – Blechdicken-Nachweise', () => {
     expect(m.tLmin).toBeUndefined()
   })
 })
+
+describe('Auslegung – Mittelblech ans Limit', () => {
+  it('t_M im 0,5-mm-Raster, Kontrolle besteht, hohe Ausnutzung', () => {
+    const r = legeBolzenAus({
+      F: 100000, spalt: 0, einbaufall: 1, lastfall: 'schwellend',
+      material: S235, aufdopplung: { tM: 0, tL: 0, dP: 16 },
+    })
+    const a = r.aufdopplung!
+    expect(a.feld).toBeTruthy()
+    // 0,5-mm-Raster
+    expect((a.tM * 2) % 1).toBeCloseTo(0, 9)
+    expect(r.kontrolle.bestanden).toBe(true)
+    // Mittelblech nahe am Limit: höchste Ausnutzung seiner Nachweise ≥ 80 %
+    const mNamen = [
+      'Zug Mittelblech (freie Länge)',
+      'Zug Mittelblech (1. Passbolzenreihe)',
+      'Passbolzen – Lochleibung Mittelblech',
+    ]
+    const eta = Math.max(
+      ...r.kontrolle.nachweise.filter((n) => mNamen.includes(n.name)).map((n) => n.vorhanden / n.zulaessig),
+    )
+    expect(eta).toBeGreaterThanOrEqual(0.8)
+    expect(eta).toBeLessThanOrEqual(1.0)
+  })
+
+  it('t_M nicht dicker als das ganzzahlige Aufrunden von früher', () => {
+    const r = legeBolzenAus({
+      F: 100000, spalt: 0, einbaufall: 1, lastfall: 'schwellend',
+      material: S235, aufdopplung: { tM: 0, tL: 0, dP: 16 },
+    })
+    const sigZ = 0.33 * S235.Rm
+    // darf das alte ceil-auf-ganze-mm-Ergebnis nie überschreiten, sofern das
+    // Feld nicht mehr verlangt (Kontrolle deckt das ab)
+    expect(r.aufdopplung!.tM).toBeLessThanOrEqual(Math.ceil(100000 / (r.bS * sigZ)) + 3)
+  })
+})

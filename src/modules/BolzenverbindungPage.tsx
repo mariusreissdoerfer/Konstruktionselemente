@@ -477,6 +477,29 @@ export function BolzenverbindungPage() {
                 die volle Paketdicke ({fmt(auslegung.aufdopplung.tM)} mm).
               </p>
             )}
+            {auslegung.aufdopplung?.feld && (() => {
+              // Mittelblech ans Limit: höchste Ausnutzung seiner Nachweise
+              const mNamen = [
+                'Zug Mittelblech (freie Länge)',
+                'Zug Mittelblech (1. Passbolzenreihe)',
+                'Passbolzen – Lochleibung Mittelblech',
+              ]
+              const eta = Math.max(
+                ...auslegung.kontrolle.nachweise
+                  .filter((n) => mNamen.includes(n.name))
+                  .map((n) => n.vorhanden / n.zulaessig),
+                0,
+              )
+              const ersparnis = 1 - auslegung.aufdopplung!.tM / auslegung.tS
+              return (
+                <p className="mt-2 text-xs text-slate-500">
+                  Mittelblech ans Limit gelegt (0,5-mm-Raster):
+                  Ausnutzung <span className="font-semibold text-slate-700">{fmt(100 * eta, 0)} %</span> ·
+                  Querschnitt der freien Länge <span className="font-semibold text-emerald-600">−{fmt(100 * ersparnis, 0)} %</span> gegenüber
+                  durchgehender Paketdicke ({fmt(auslegung.aufdopplung!.tM)} statt {fmt(auslegung.tS)} mm).
+                </p>
+              )
+            })()}
             <p className="mt-2 text-xs text-slate-500">
               R/M-Richtwert Augenstab: Stegbreite (b−d)/2 ≈ 0,75·d → b ≈ {fmt(Math.round(2.5 * auslegung.d))} mm,
               Kopfhöhe c ≈ 1,1·d → c ≈ {fmt(Math.round(1.1 * auslegung.d))} mm. Maßgebend bleibt der größere

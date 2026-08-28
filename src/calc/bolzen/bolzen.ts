@@ -714,21 +714,25 @@ export function legeBolzenAus(
   const cG = Math.ceil(randAbstandErf(F, tG, dLochG, 4, fak, material))
 
   // ---- Aufdopplung: optimale Aufteilung des Pakets t_S in t_M + 2·t_L ----
-  // t_M aus Zug im ungestörten Vollquerschnitt des Schafts (F/(b_S·σ_z)),
-  // dann so lange erhöht, bis auch das Passbolzenfeld alle Nachweise erfüllt
-  // (Nettozug an der 1. Reihe trägt die volle Kraft F).
+  // Das Mittelblech ist der Kostentreiber (volle Bauteillänge!) und wird
+  // deshalb ans Limit gelegt: Start am Zug-Minimum des Vollquerschnitts
+  // (F/(b_S·σ_z)) im 0,5-mm-Raster, erhöht nur, wenn das Passbolzenfeld
+  // (v. a. Nettozug an der 1. Reihe, volle Kraft F) es erzwingt. Die
+  // Dickenreserve steckt in den kurzen, günstigen Laschen.
   let aufdopplungOut: AuslegungErgebnis['aufdopplung'] = null
   let aufCfg: AufdopplungConfig | null = null
   if (input.aufdopplung) {
     const dP = input.aufdopplung.dP
     const tPaket = tS
-    let tM = Math.max(2, Math.ceil(F / (bS * sigZ)))
+    const step = 0.5
+    const aufStep = (x: number) => Math.ceil(x / step - 1e-9) * step
+    let tM = Math.max(2, aufStep(F / (bS * sigZ)))
     let tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
     let feld: PassbolzenFeld | null = null
-    for (let i = 0; i < 1000 && tL > 0; i++) {
+    for (let i = 0; i < 2000 && tL > 0; i++) {
       feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material)
       if (feld.nachweise.every((n) => n.erfuellt)) break
-      tM += 1
+      tM += step
       tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
       feld = null
     }
