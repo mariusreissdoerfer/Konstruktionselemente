@@ -131,6 +131,7 @@ export function BolzenverbindungPage() {
   const [gelenkOn, setGelenkOn] = useLocalStorage('ke.bolzen.gelenkOn', true)
   const [gelenkC0r, setGelenkC0r] = useLocalStorage('ke.bolzen.gelenkC0r', 23800) // kN
   const [gelenkFb, setGelenkFb] = useLocalStorage('ke.bolzen.gelenkFb', 2.75)
+  const [gelenkB, setGelenkB] = useLocalStorage('ke.bolzen.gelenkB', 135) // Außenring-Breite C
 
   // Das Auge muss den Bolzen umschließen: b ≥ d (+ Mindeststeg). Wächst d,
   // wandert die Augenkante mit nach außen (Lage), b kann nicht unter d fallen.
@@ -153,8 +154,10 @@ export function BolzenverbindungPage() {
   const aufdopplung: AufdopplungConfig | null = aufOn ? { tM: aufTM, tL: aufTL, dP: aufDP } : null
   const tSEff = aufOn ? aufTM + 2 * aufTL : tS
 
-  // Buchsenlänge wahlweise an Blechdicke gekoppelt
-  const lenS = buchseLenGleichT ? tSEff : buchseLenS
+  // Buchsenlänge wahlweise an Blechdicke gekoppelt; beim Gelenklager trägt
+  // im Auge die Außenring-Breite C
+  const gelenkAktiv = gelenkOn && buchseOrt !== 'gabel'
+  const lenS = gelenkAktiv ? gelenkB : buchseLenGleichT ? tSEff : buchseLenS
   const lenG = buchseLenGleichT ? tG : buchseLenG
 
   const buchse: BuchseConfig | null = buchseOn
@@ -165,7 +168,7 @@ export function BolzenverbindungPage() {
         laengeGabel: lenG,
         material: buchseMat,
         ort: buchseOrt,
-        gelenk: gelenkOn && buchseOrt !== 'gabel' ? { C0r: gelenkC0r * 1000, fb: gelenkFb } : null,
+        gelenk: gelenkAktiv ? { C0r: gelenkC0r * 1000, fb: gelenkFb, breite: gelenkB } : null,
       }
     : null
 
@@ -425,11 +428,14 @@ export function BolzenverbindungPage() {
                   {gelenkOn && (
                     <div className="space-y-3 border-l-2 border-sky-300 pl-3">
                       <NumberInput label="stat. Tragzahl" symbol="C_0r" unit="kN" value={gelenkC0r} onChange={setGelenkC0r} min={10} max={100000} step={100} />
+                      <NumberInput label="Lagerbreite (Außenring)" symbol="C" unit="mm" value={gelenkB} onChange={setGelenkB} min={5} max={600} step={1} />
                       <p className="text-[11px] leading-snug text-slate-500">
                         Herstellernachweis statt Pressung Bolzen–Buchse:
                         F·f_b ≤ C_0r (z. B. Schaeffler GE360-DW: C_0r = 23.800 kN;
                         f_b siehe Methode, Default 2,75 schwellend). Der Sitz im
-                        Auge (außen) wird weiter als Pressung geprüft.
+                        Auge trägt über die Ringbreite C und wird als Pressung
+                        geprüft; das Blech darf nicht dünner sein als C
+                        (Mindestmaß t_S ≥ C).
                       </p>
                     </div>
                   )}

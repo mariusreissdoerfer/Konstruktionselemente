@@ -270,6 +270,10 @@ export interface BuchseConfig {
     C0r: number
     /** Belastungsfaktor f_b (Herstellerangabe je Lastbild) */
     fb: number
+    /** Lagerbreite (Außenring C) in mm: tragende Breite des Sitzes im Auge
+     *  und zugleich Mindestmaß für die Blechdicke t_S (der Ring darf nicht
+     *  überstehen). Z. B. GE360-DW: C = 135. */
+    breite?: number
   } | null
 }
 
@@ -695,7 +699,14 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   // Lochleibung: mit Buchse zählt außen d_a gegen das Blech (innen trägt die
   // Buchsenlänge, nicht die Blechdicke) – wie in der Auslegung
   const pKon = (a: Material, b: Material) => faktoren.cP * Math.min(a.Rm, b.Rm)
-  const tSmin = buchseS && buchse ? F / (buchse.daStange * pKon(buchse.material, material)) : F / (d * pZul)
+  const tSmin =
+    buchseS && buchse
+      ? Math.max(
+          F / (buchse.daStange * pKon(buchse.material, material)),
+          // Gelenklager: Blech mindestens so dick wie der Außenring
+          buchse.gelenk?.breite ?? 0,
+        )
+      : F / (d * pZul)
   const tGmin = buchseG && buchse ? F / (2 * buchse.daGabel * pKon(buchse.material, material)) : F / (2 * d * pZul)
 
   // Aufdopplung: Mindestdicken für Mittelblech und Laschen
@@ -819,8 +830,10 @@ export function legeBolzenAus(
   const tSmin = (d: number): number => {
     if (bStange && buchse) {
       const aussen = F / (buchse.daStange * pKontakt(buchse.material, material))
-      // Gelenklager: innen gilt die Hersteller-Tragzahl, nicht die Pressung
-      if (buchse.gelenk) return aussen
+      // Gelenklager: innen gilt die Hersteller-Tragzahl, nicht die Pressung;
+      // die Lagerbreite (Außenring C) ist Mindestmaß für die Blechdicke —
+      // das Blech darf nicht schmaler sein als der Ring
+      if (buchse.gelenk) return Math.max(aussen, buchse.gelenk.breite ?? 0)
       return Math.max(F / (d * pKontakt(matBolzen, buchse.material)), aussen)
     }
     return F / (d * pZul)
@@ -959,11 +972,16 @@ export function legeBolzenAus(
     }
 
     // Kontrolle: Die Buchsenlänge wächst mit der ausgelegten Blechdicke mit
-    // (Annahme der Dickenformeln oben: Buchsenlänge = Blechdicke)
+    // (Annahme der Dickenformeln oben: Buchsenlänge = Blechdicke).
+    // Beim Gelenklager bleibt die Ringbreite die feste Katalogsgröße.
     const kontrolle = berechneBolzen({
       ...input, d, tS, tG, bS, bG, cS, cG, aufdopplung: aufCfg,
       buchse: buchse
-        ? { ...buchse, laengeStange: Math.max(buchse.laengeStange, tS), laengeGabel: Math.max(buchse.laengeGabel, tG) }
+        ? {
+            ...buchse,
+            laengeStange: buchse.gelenk ? buchse.laengeStange : Math.max(buchse.laengeStange, tS),
+            laengeGabel: Math.max(buchse.laengeGabel, tG),
+          }
         : null,
     })
 

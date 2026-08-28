@@ -626,3 +626,43 @@ describe('Methode Schaeffler (global)', () => {
     expect(r.nachweise.find((n) => n.name === 'Zug Stange')!.zulaessig).toBeCloseTo(0.33 * S355_100.Rm, 1)
   })
 })
+
+describe('Gelenklager – Lagerbreite C als Mindestmaß', () => {
+  const S355_100 = MATERIAL_BY_ID.get('S355J2_100')!
+  const CrMo = MATERIAL_BY_ID.get('42CrMo4')!
+  const Ring = MATERIAL_BY_ID.get('LagerStahl')!
+  const buchse = {
+    daStange: 480, daGabel: 392, laengeStange: 135, laengeGabel: 118,
+    material: Ring, ort: 'stange' as const,
+    gelenk: { C0r: 23800000, fb: 2.75, breite: 135 },
+  }
+
+  it('Sitz-Pressung trägt über min(C, t_S)', () => {
+    const r = berechneBolzen({
+      F: 6125000, d: 360, tS: 236, tG: 118, bS: 1010, bG: 1130, cS: 705, cG: 515,
+      spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+      material: S355_100, bolzenMaterial: CrMo, methode: 'schaeffler', fb: 2.75, buchse,
+    })
+    const a = r.nachweise.find((n) => n.name.includes('Stange außen'))!
+    // p = F/(d_a·C) = 6.125.000/(480·135) = 94,52
+    expect(a.vorhanden).toBeCloseTo(6125000 / (480 * 135), 1)
+  })
+
+  it('Auslegung: t_S mindestens Lagerbreite', () => {
+    const r = legeBolzenAus({
+      F: 6125000, spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+      material: S355_100, bolzenMaterial: CrMo, methode: 'schaeffler', fb: 2.75, buchse,
+    })
+    expect(r.tS).toBeGreaterThanOrEqual(135)
+    expect(r.kontrolle.bestanden).toBe(true)
+  })
+
+  it('mindestMasse: t_S,min = Lagerbreite (Pressung bindet hier nicht)', () => {
+    const m = mindestMasse({
+      F: 6125000, d: 360, tS: 236, tG: 118, bS: 1010, bG: 1130, cS: 705, cG: 515,
+      spalt: 40, einbaufall: 2, lastfall: 'schwellend',
+      material: S355_100, bolzenMaterial: CrMo, methode: 'schaeffler', fb: 2.75, buchse,
+    })
+    expect(m.tSmin).toBeGreaterThanOrEqual(135)
+  })
+})
