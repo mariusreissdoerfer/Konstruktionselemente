@@ -96,8 +96,11 @@ export interface PassbolzenFeld {
   nReihen: number
   /** verbaute Bolzenanzahl = Summe der Reihen */
   n: number
-  /** Lochabstand (Teilung) 3·d_P in mm */
+  /** Lochabstand längs (in Kraftrichtung) 3·d_P in mm */
   teilung: number
+  /** Lochabstand quer (in der Reihe) 2,4·d_P in mm — enger als längs,
+   *  damit die Reihen breit und das Feld (die Lasche) kurz werden */
+  teilungQuer: number
   /** Randabstand in Kraftrichtung 2·d_P in mm */
   randLaengs: number
   /** Länge des Feldes in Kraftrichtung in mm */
@@ -143,9 +146,12 @@ export function berechnePassbolzenFeld(
   const nErf = Math.max(1, Math.ceil(FL / FproBolzen))
 
   const teilung = 3 * dP
+  // quer zur Kraft ist eine engere Teilung zulässig (Stahlbau-Minimum
+  // p₂ ≥ 2,4·d) → lieber breite Reihen als ein langes Feld / lange Laschen
+  const teilungQuer = 2.4 * dP
   const randLaengs = 2 * dP
   // geometrisch möglich je Reihe (Randabstand quer ≥ 1,5·d_P je Seite)
-  const nGeo = Math.max(1, Math.floor((bS - teilung) / teilung) + 1)
+  const nGeo = Math.max(1, Math.floor((bS - 2 * 1.5 * dP) / teilungQuer) + 1)
 
   // Staffel-Layout: je Reihe so viele Bolzen, wie Nettozug (Mittelblech mit
   // Restkraft, Laschen mit bereits eingeleiteter Kraft) und Breite zulassen.
@@ -235,7 +241,7 @@ export function berechnePassbolzenFeld(
     ),
   ]
 
-  return { FL, nErf, reihen, nProReihe, nReihen, n, teilung, randLaengs, feldLaenge, nachweise }
+  return { FL, nErf, reihen, nProReihe, nReihen, n, teilung, teilungQuer, randLaengs, feldLaenge, nachweise }
 }
 
 /** Optionale Buchse(n) in den Bohrungen – getrennt für Stange und Gabel. */
@@ -881,6 +887,37 @@ export function legeBolzenAus(
       // auf 0,01 mm aufrunden, damit S ≥ 1 sicher bleibt
       tM = Math.ceil(tM * 100 - 1e-6) / 100
       if (tL > 0 && feld) feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material, matBolzen)
+
+      // Kurze Lasche bevorzugen: Am exakten t_M-Limit erlaubt der Nettozug
+      // in den ersten Reihen oft nur 1 Bolzen → langes Feld. Wir erlauben
+      // bis zu +40 % Mittelblechdicke, wenn das die Reihen verbreitert und
+      // die Lasche (Feldlänge) verkürzt — lieber in die Breite als in die
+      // Länge. Gewählt wird die kürzeste Lasche, bei Gleichstand das
+      // dünnste Mittelblech.
+      if (tL > 0 && feld) {
+        let best = { tM, tL, feld }
+        const tMBase = tM
+        const nGeoQuer = Math.max(1, Math.floor((bS - 2 * 1.5 * dP) / (2.4 * dP)) + 1)
+        for (let k2 = 2; k2 <= nGeoQuer; k2++) {
+          const netto = bS - k2 * dP
+          if (netto <= 0) break
+          const tMk = Math.ceil(Math.max(tMBase, F / (netto * sigZ)) * 100 + 1e-6) / 100
+          if (tMk > 1.4 * tMBase) break // Aufpreis-Deckel, tMk wächst monoton
+          const tLk = Math.ceil(Math.max(tPaket - tMk, 0) / 2)
+          if (tLk <= 0) break
+          const kand = berechnePassbolzenFeld(F, bS, { tM: tMk, tL: tLk, dP }, fak, material, matBolzen)
+          if (!kand.nachweise.every((n) => n.erfuellt)) continue
+          if (
+            kand.feldLaenge < best.feld.feldLaenge ||
+            (kand.feldLaenge === best.feld.feldLaenge && tMk < best.tM)
+          ) {
+            best = { tM: tMk, tL: tLk, feld: kand }
+          }
+        }
+        tM = best.tM
+        tL = best.tL
+        feld = best.feld
+      }
       if (tL <= 0) {
         // Mittelblech braucht ohnehin die volle Paketdicke → Laschen unnötig
         aufdopplungOut = { tM: tPaket, tL: 0, feld: null }

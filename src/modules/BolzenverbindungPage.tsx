@@ -375,7 +375,7 @@ export function BolzenverbindungPage() {
                 Zug über die freie Länge; am Auge doppeln beidseitige Laschen
                 auf. Der Laschenanteil wird auf der Zugseite über ein
                 Passbolzenfeld eingeleitet (Anordnung wird automatisch
-                bestimmt: Teilung 3·d_P, Rand 2·d_P).
+                bestimmt: Teilung längs 3·d_P, quer 2,4·d_P, Rand 2·d_P).
                 {modus === 'auslegung' && ' Die Aufteilung t_M/t_L wird in der Auslegung optimal bestimmt.'}
               </p>
             </div>
@@ -531,7 +531,7 @@ export function BolzenverbindungPage() {
               const ersparnis = 1 - auslegung.aufdopplung!.tM / auslegung.tS
               return (
                 <p className="mt-2 text-xs text-slate-500">
-                  Mittelblech exakt auf S = 1 gelegt:
+                  Mittelblech ans Limit gelegt (max. +40 % für kurze Lasche):
                   Ausnutzung <span className="font-semibold text-slate-700">{fmt(100 * eta, 0)} %</span> ·
                   Querschnitt der freien Länge <span className="font-semibold text-emerald-600">−{fmt(100 * ersparnis, 0)} %</span> gegenüber
                   durchgehender Paketdicke ({fmt(auslegung.aufdopplung!.tM)} statt {fmt(auslegung.tS)} mm).
@@ -588,7 +588,9 @@ export function BolzenverbindungPage() {
                 = {passfeld.n} Stk
               </AusMass>
               <AusMass label="Passbolzen ⌀d_P" wert={aufDP} />
-              <AusMass label="Teilung (3·d_P)" wert={passfeld.teilung} />
+              <AusMass label="Teilung längs / quer" wert={NaN}>
+                {fmt(passfeld.teilung)} / {fmt(passfeld.teilungQuer)} mm
+              </AusMass>
               <AusMass label="Rand längs (2·d_P)" wert={passfeld.randLaengs} />
               <AusMass label="Feldlänge" wert={passfeld.feldLaenge} />
               <AusMass label="Laschenlänge L_L" wert={Math.max(2 * anzeigeCS, anzeigeD) + passfeld.feldLaenge} stark />
@@ -601,7 +603,7 @@ export function BolzenverbindungPage() {
               verbaut {passfeld.n}. Gestaffelte Anordnung für kurze Laschen:
               die 1. Reihe (Schaftseite, volle Kraft im Mittelblech) trägt
               wenige Bolzen, jede weitere mehr — begrenzt durch Nettozug und
-              Blechbreite (Teilung 3·d_P).
+              Blechbreite (Teilung längs 3·d_P, quer 2,4·d_P — breite Reihen für kurze Laschen).
             </p>
           </div>
         )}

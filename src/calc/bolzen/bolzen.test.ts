@@ -381,15 +381,14 @@ describe('Auslegung – Mittelblech ans Limit', () => {
     expect(eta).toBeLessThanOrEqual(1.0)
   })
 
-  it('t_M nicht dicker als das ganzzahlige Aufrunden von früher', () => {
+  it('t_M höchstens +40 % über dem Vollquerschnitts-Limit (kurze-Lasche-Deckel)', () => {
     const r = legeBolzenAus({
       F: 100000, spalt: 0, einbaufall: 1, lastfall: 'schwellend',
       material: S235, aufdopplung: { tM: 0, tL: 0, dP: 16 },
     })
     const sigZ = 0.33 * S235.Rm
-    // darf das alte ceil-auf-ganze-mm-Ergebnis nie überschreiten, sofern das
-    // Feld nicht mehr verlangt (Kontrolle deckt das ab)
-    expect(r.aufdopplung!.tM).toBeLessThanOrEqual(Math.ceil(100000 / (r.bS * sigZ)) + 3)
+    const tMLimit = 100000 / (r.bS * sigZ)
+    expect(r.aufdopplung!.tM).toBeLessThanOrEqual(1.4 * Math.max(tMLimit, 2) + 3)
   })
 })
 
@@ -565,5 +564,18 @@ describe('Kopfnachweis nach Herstellermethode (Gelenklager aktiv)', () => {
     })
     expect(mit.bS).toBeGreaterThan(ohne.bS)
     expect(mit.kontrolle.bestanden).toBe(true)
+  })
+})
+
+describe('Feldgeometrie – breite Reihen bevorzugt', () => {
+  it('Quer-Teilung 2,4·d_P erlaubt breitere Reihen als 3·d_P (kurzes Feld)', () => {
+    // dickes Mittelblech → Nettozug bindet nicht; Geometrie limitiert:
+    // b_S=1010, d_P=40 → quer passen (1010−120)/96+1 = 10 (statt 8 bei 3·d_P)
+    const feld = berechnePassbolzenFeld(9e6, 1010, { tM: 200, tL: 100, dP: 40 }, ZUL_FAKTOREN.schwellend, MATERIAL_BY_ID.get('S355JR')!, MATERIAL_BY_ID.get('42CrMo4')!)
+    expect(feld.teilungQuer).toBeCloseTo(96, 6)
+    // breiteste Reihe nutzt die engere Quer-Teilung (> 8 = altes Maximum)
+    expect(Math.max(...feld.reihen)).toBeGreaterThanOrEqual(9)
+    expect(feld.nReihen).toBeLessThanOrEqual(2)
+    expect(feld.nachweise.every((n) => n.erfuellt)).toBe(true)
   })
 })

@@ -162,6 +162,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const feldVoll = auf ? 2 * randPx0 + (visReihen - 1) * teilungPx0 : 0
   const fs = feldVoll > 140 ? 140 / feldVoll : 1 // Feld-eigener Maßstabsfaktor
   const teilungPx = teilungPx0 * fs
+  const teilungQuerPx = auf ? 2.4 * auf.dP * s * fs : 0 // Reihen-Teilung (quer, enger)
   const randPx = randPx0 * fs
   const rpP = auf ? ((auf.dP * s) / 2) * fs : 0
   /** Abstand der Reihe i vom Augenrand */
@@ -283,7 +284,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
             {reihenArr.flatMap((anz, i) =>
               Array.from({ length: anz }).map((_, j) => {
                 const laengs = rowOff(i) // Abstand vom Augenrand in Kraftrichtung
-                const quer = (j - (anz - 1) / 2) * teilungPx
+                const quer = (j - (anz - 1) / 2) * teilungQuerPx
                 const px = knie ? sideCx + sEyeW / 2 + laengs : sideCx + quer
                 const py = knie ? cy + quer : cy + ehS / 2 + laengs
                 return <circle key={`${i}-${j}`} cx={px} cy={py} r={rpP} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.2} />
@@ -512,7 +513,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
       )}
       {/* Passbolzenfeld: gestrichelter roter Rahmen ums Feld */}
       {v.passfeld && auf && (() => {
-        const halbQuer = ((auf.nProReihe - 1) / 2) * teilungPx + rpP + 5
+        const halbQuer = ((auf.nProReihe - 1) / 2) * teilungQuerPx + rpP + 5
         const laengs0 = randPx - rpP - 5
         const laengs1 = rowOff(visReihen - 1) + rpP + 5
         return knie ? (
