@@ -65,6 +65,127 @@ export const EINBAUFALL_INFO: Record<
 /** Wo die Buchse(n) sitzen. */
 export type BuchseOrt = 'beide' | 'stange' | 'gabel'
 
+/**
+ * Aufdopplung der Stange am Auge (Blechbauweise): Das Mittelblech (Dicke t_M)
+ * trägt den Zug über die freie Länge; nur am Auge wird beidseitig je eine
+ * Lasche (Dicke t_L) aufgelegt → Paketdicke t_S = t_M + 2·t_L. Der Laschen-
+ * anteil der Kraft wird auf der Zugseite über ein Passbolzenfeld in das
+ * Mittelblech ein-/ausgeleitet (vgl. genietete Augenstäbe im Brückenbau).
+ */
+export interface AufdopplungConfig {
+  /** Dicke des Mittelblechs in mm */
+  tM: number
+  /** Laschendicke je Seite in mm */
+  tL: number
+  /** Passbolzendurchmesser d_P in mm */
+  dP: number
+}
+
+/** Ergebnis der Passbolzenfeld-Auslegung (Anordnung + Nachweise). */
+export interface PassbolzenFeld {
+  /** Kraftanteil der beiden Laschen (über das Feld übertragen) in N */
+  FL: number
+  /** rechnerisch erforderliche Passbolzenanzahl */
+  nErf: number
+  /** Bolzen je Reihe (quer zur Kraft) */
+  nProReihe: number
+  /** Anzahl Reihen (in Kraftrichtung) */
+  nReihen: number
+  /** verbaute Bolzenanzahl = nReihen · nProReihe */
+  n: number
+  /** Lochabstand (Teilung) 3·d_P in mm */
+  teilung: number
+  /** Randabstand in Kraftrichtung 2·d_P in mm */
+  randLaengs: number
+  /** Länge des Feldes in Kraftrichtung in mm */
+  feldLaenge: number
+  /** Nachweise des Feldes (auch in BolzenErgebnis.nachweise enthalten) */
+  nachweise: Nachweis[]
+}
+
+/**
+ * Passbolzenfeld berechnen (optimale Aufteilung):
+ *  1. Laschenanteil F_L = F · 2·t_L / (t_M + 2·t_L) (Steifigkeitsverhältnis
+ *     der Querschnitte, gleiche Breite und gleicher Werkstoff).
+ *  2. Tragfähigkeit je Passbolzen = min(Abscherung zweischnittig,
+ *     Lochleibung Mittelblech, Lochleibung Laschen) → n_erf.
+ *  3. Bolzen je Reihe: so viele wie Breite (Teilung 3·d_P, Rand 1,5·d_P)
+ *     und der Nettozug des Mittelblechs an der 1. Reihe (volle Kraft F!)
+ *     zulassen; Reihenanzahl = aufrunden(n_erf / je Reihe).
+ */
+export function berechnePassbolzenFeld(
+  F: number,
+  bS: number,
+  auf: AufdopplungConfig,
+  fak: ZulFaktoren,
+  material: Material,
+): PassbolzenFeld {
+  const { tM, tL, dP } = auf
+  const tPaket = tM + 2 * tL
+  const FL = (F * 2 * tL) / tPaket
+  const tauZul = fak.cTau * material.Rm
+  const pZul = fak.cP * material.Rm
+  const sigZ = fak.cZug * material.Rm
+  const AP = (Math.PI * dP * dP) / 4
+
+  // Tragfähigkeit je Bolzen (zweischnittig; Lochleibung Mittelblech/Laschen)
+  const FproBolzen = Math.min(2 * AP * tauZul, dP * tM * pZul, dP * 2 * tL * pZul)
+  const nErf = Math.max(1, Math.ceil(FL / FproBolzen))
+
+  const teilung = 3 * dP
+  const randLaengs = 2 * dP
+  // geometrisch möglich je Reihe (Randabstand quer ≥ 1,5·d_P je Seite)
+  const nGeo = Math.max(1, Math.floor((bS - teilung) / teilung) + 1)
+  // Nettozug des Mittelblechs an der 1. Reihe begrenzt die Lochzahl je Reihe:
+  // (b_S − k·d_P) · t_M · σ_z,zul ≥ F
+  const kZug = Math.floor((bS - F / (tM * sigZ)) / dP)
+  const nProReihe = Math.max(1, Math.min(nGeo, kZug, nErf))
+  const nReihen = Math.ceil(nErf / nProReihe)
+  const n = nReihen * nProReihe
+  const feldLaenge = (nReihen - 1) * teilung + 2 * randLaengs
+
+  const netM = Math.max(bS - nProReihe * dP, 0)
+  const nachweise: Nachweis[] = [
+    nachweis(
+      'Passbolzen – Abscherung',
+      `τ = F_L / (n · 2 · A_P) ,  n = ${n}, A_P = π·d_P²/4`,
+      `${fmt(FL)} / (${n} · 2 · ${fmt(AP)})`,
+      FL / (n * 2 * AP),
+      tauZul,
+    ),
+    nachweis(
+      'Passbolzen – Lochleibung Mittelblech',
+      'p = F_L / (n · d_P · t_M)',
+      `${fmt(FL)} / (${n} · ${fmt(dP)} · ${fmt(tM)})`,
+      FL / (n * dP * tM),
+      pZul,
+    ),
+    nachweis(
+      'Passbolzen – Lochleibung Laschen',
+      'p = F_L / (n · d_P · 2·t_L)',
+      `${fmt(FL)} / (${n} · ${fmt(dP)} · ${fmt(2 * tL)})`,
+      FL / (n * dP * 2 * tL),
+      pZul,
+    ),
+    nachweis(
+      'Zug Mittelblech (1. Passbolzenreihe)',
+      `σ_z = F / ((b_S − ${nProReihe}·d_P) · t_M)`,
+      `${fmt(F)} / (${fmt(netM)} · ${fmt(tM)})`,
+      netM > 0 ? F / (netM * tM) : Infinity,
+      sigZ,
+    ),
+    nachweis(
+      'Zug Laschen (Passbolzenreihe)',
+      `σ_z = F_L / ((b_S − ${nProReihe}·d_P) · 2·t_L)`,
+      `${fmt(FL)} / (${fmt(netM)} · ${fmt(2 * tL)})`,
+      netM > 0 ? FL / (netM * 2 * tL) : Infinity,
+      sigZ,
+    ),
+  ]
+
+  return { FL, nErf, nProReihe, nReihen, n, teilung, randLaengs, feldLaenge, nachweise }
+}
+
 /** Optionale Buchse(n) in den Bohrungen – getrennt für Stange und Gabel. */
 export interface BuchseConfig {
   /** Außendurchmesser der Buchse in der Stange in mm */
@@ -105,6 +226,8 @@ export interface BolzenInput {
   material: Material
   /** optionale Buchse */
   buchse?: BuchseConfig | null
+  /** optionale Aufdopplung der Stange (dann gilt t_S = t_M + 2·t_L) */
+  aufdopplung?: AufdopplungConfig | null
   /** optionale Überschreibung der zulässigen-Faktoren (sonst aus Lastfall) */
   faktoren?: ZulFaktoren
 }
@@ -124,6 +247,8 @@ export interface BolzenErgebnis {
   minSicherheit: number
   /** true, wenn alle Nachweise erfüllt sind */
   bestanden: boolean
+  /** Passbolzenfeld (nur bei Aufdopplung) */
+  passfeld?: PassbolzenFeld
 }
 
 /** Kreisquerschnittsfläche des Bolzens, A = π·d²/4 [mm²]. */
@@ -237,7 +362,10 @@ function ausreissNachweis(
 
 /** Vollständige Berechnung (Nachweis) der Bolzenverbindung. */
 export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
-  const { F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material } = input
+  const { F, d, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material } = input
+  const auf = input.aufdopplung ?? null
+  // Bei Aufdopplung wirkt am Auge die Paketdicke t_S = t_M + 2·t_L
+  const tS = auf ? auf.tM + 2 * auf.tL : input.tS
   const buchse = input.buchse ?? null
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[lastfall]
   const { cP, cSigma, cTau, cZug } = faktoren
@@ -352,6 +480,10 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   nachweise.push(ausreissNachweis('Stange', F, tS, dLochS, cS, 2, faktoren, material))
   nachweise.push(ausreissNachweis('Gabel', F, tG, dLochG, cG, 4, faktoren, material))
 
+  // ---- Passbolzenfeld (Krafteinleitung in die Laschen bei Aufdopplung) ----
+  const passfeld = auf && auf.tL > 0 ? berechnePassbolzenFeld(F, bS, auf, faktoren, material) : undefined
+  if (passfeld) nachweise.push(...passfeld.nachweise)
+
   // ---- Abscherung (zweischnittig) ----
   nachweise.push(
     nachweis(
@@ -377,7 +509,7 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   const minSicherheit = round(Math.min(...nachweise.map((n) => n.sicherheit)))
   const bestanden = nachweise.every((n) => n.erfuellt)
 
-  return { Mb, Wb, A, faktoren, nachweise, minSicherheit, bestanden }
+  return { Mb, Wb, A, faktoren, nachweise, minSicherheit, bestanden, passfeld }
 }
 
 export interface MindestMasse {
@@ -402,7 +534,9 @@ export interface MindestMasse {
  * Die Breiten werden mit den aktuell eingestellten Dicken berechnet.
  */
 export function mindestMasse(input: BolzenInput): MindestMasse {
-  const { F, d, tS, tG, material } = input
+  const { F, d, tG, material } = input
+  const auf = input.aufdopplung ?? null
+  const tS = auf ? auf.tM + 2 * auf.tL : input.tS
   const buchse = input.buchse ?? null
   const faktoren = input.faktoren ?? ZUL_FAKTOREN[input.lastfall]
   const pZul = faktoren.cP * material.Rm
@@ -453,6 +587,13 @@ export interface AuslegungErgebnis {
   massgebend: string
   /** Kontrolle mit den ausgelegten Maßen (sollte alle Nachweise erfüllen) */
   kontrolle: BolzenErgebnis
+  /** optimale Aufteilung bei Aufdopplung: Mittelblech + Laschen + Feld */
+  aufdopplung?: {
+    tM: number
+    tL: number
+    /** null, wenn das Mittelblech allein reicht (keine Laschen nötig) */
+    feld: PassbolzenFeld | null
+  } | null
 }
 
 function naechsterNorm(d: number): number {
@@ -531,7 +672,35 @@ export function legeBolzenAus(
   const cS = Math.ceil(randAbstandErf(F, tS, dLochS, 2, fak, material))
   const cG = Math.ceil(randAbstandErf(F, tG, dLochG, 4, fak, material))
 
-  const kontrolle = berechneBolzen({ ...input, d, tS, tG, bS, bG, cS, cG })
+  // ---- Aufdopplung: optimale Aufteilung des Pakets t_S in t_M + 2·t_L ----
+  // t_M aus Zug im ungestörten Vollquerschnitt des Schafts (F/(b_S·σ_z)),
+  // dann so lange erhöht, bis auch das Passbolzenfeld alle Nachweise erfüllt
+  // (Nettozug an der 1. Reihe trägt die volle Kraft F).
+  let aufdopplungOut: AuslegungErgebnis['aufdopplung'] = null
+  let aufCfg: AufdopplungConfig | null = null
+  if (input.aufdopplung) {
+    const dP = input.aufdopplung.dP
+    const tPaket = tS
+    let tM = Math.max(2, Math.ceil(F / (bS * sigZ)))
+    let tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
+    let feld: PassbolzenFeld | null = null
+    for (let i = 0; i < 1000 && tL > 0; i++) {
+      feld = berechnePassbolzenFeld(F, bS, { tM, tL, dP }, fak, material)
+      if (feld.nachweise.every((n) => n.erfuellt)) break
+      tM += 1
+      tL = Math.ceil(Math.max(tPaket - tM, 0) / 2)
+      feld = null
+    }
+    if (tL <= 0) {
+      // Mittelblech braucht ohnehin die volle Paketdicke → Laschen unnötig
+      aufdopplungOut = { tM: tPaket, tL: 0, feld: null }
+    } else {
+      aufCfg = { tM, tL, dP }
+      aufdopplungOut = { tM, tL, feld }
+    }
+  }
 
-  return { d, tS, tG, bS, bG, cS, cG, dErf: round(dErf, 2), massgebend, kontrolle }
+  const kontrolle = berechneBolzen({ ...input, d, tS, tG, bS, bG, cS, cG, aufdopplung: aufCfg })
+
+  return { d, tS, tG, bS, bG, cS, cG, dErf: round(dErf, 2), massgebend, kontrolle, aufdopplung: aufdopplungOut }
 }

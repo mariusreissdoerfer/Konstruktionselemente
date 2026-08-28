@@ -31,6 +31,14 @@ export interface BolzenDiagramProps {
   spalt: number
   /** 90°-Knie: Stange steht im rechten Winkel zur Gabel */
   knie?: boolean
+  /** Aufdopplung der Stange: Laschen + Passbolzenfeld auf der Zugseite */
+  aufdopplung?: {
+    tM: number
+    tL: number
+    dP: number
+    nReihen: number
+    nProReihe: number
+  } | null
   buchseStangeDa: number | null
   buchseGabelDa: number | null
   buchseLenStange: number | null
@@ -50,6 +58,8 @@ export interface Versagen {
   ausreissGabel?: boolean
   abscherung?: boolean
   biegung?: boolean
+  /** Passbolzenfeld/Mittelblech/Laschen (Aufdopplung) */
+  passfeld?: boolean
 }
 
 const ROT = '#dc2626'
@@ -62,22 +72,29 @@ const COL = {
   bolzenStroke: '#0369a1',
   buchse: '#fbbf24',
   buchseStroke: '#b45309',
+  lasche: '#c7d2fe',
+  lascheStroke: '#6366f1',
   mass: '#334155',
   kraft: '#dc2626',
 }
 
 /** gemeinsamer Maßstab (px pro mm) für beide Ansichten */
-function useScale({ d, tS, tG, bS, bG, cS, cG, spalt, buchseStangeDa, buchseGabelDa }: BolzenDiagramProps) {
+function useScale({ d, tS, tG, bS, bG, cS, cG, spalt, aufdopplung, buchseStangeDa, buchseGabelDa }: BolzenDiagramProps) {
   const dMax = Math.max(d, buchseStangeDa ?? 0, buchseGabelDa ?? 0, 6)
   const wMax = Math.max(bS, bG, dMax)
-  const hMax = Math.max(2 * cS, 2 * cG, dMax)
+  // Passbolzenfeld verlängert die Stange auf der Zugseite
+  const feldLen = aufdopplung
+    ? 4 * aufdopplung.dP + (aufdopplung.nReihen - 1) * 3 * aufdopplung.dP
+    : 0
+  const hMax = Math.max(2 * cS + feldLen, 2 * cG, dMax)
   const L = 2 * tG + 2 * spalt + tS || 1
   const s = Math.min(300 / L, 150 / Math.max(wMax, hMax), 80 / dMax, 4)
   return { s }
 }
 
 export function BolzenDiagram(props: BolzenDiagramProps) {
-  const { d, tS, tG, bS, bG, cS, cG, spalt, knie = false, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
+  const { d, tS, tG, bS, bG, cS, cG, spalt, knie = false, aufdopplung, buchseStangeDa, buchseGabelDa, buchseLenStange, buchseLenGabel, onEditDim } = props
+  const auf = aufdopplung ?? null
   const v = props.versagen ?? {}
   const { s } = useScale(props)
 
@@ -127,10 +144,19 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const stemThk = Math.max(Math.min(wG, wS) * 0.6, 8) // Dicke des Stangenstiels
   const sideCx = sideLeft + wOuter / 2
   const rp = dp / 2
+
+  // Passbolzenfeld (Aufdopplung): Ausdehnung auf der Zugseite in px
+  const teilungPx = auf ? 3 * auf.dP * s : 0
+  const randPx = auf ? 2 * auf.dP * s : 0
+  const feldExtra = auf ? 2 * randPx + (auf.nReihen - 1) * teilungPx : 0
+  const rpP = auf ? (auf.dP * s) / 2 : 0
+
   // Stange läuft beim Knie nach rechts: Stiel + Kraftpfeil
-  const stStemEndX = sideCx + sEyeW / 2 + 34
+  const stStemEndX = sideCx + sEyeW / 2 + feldExtra + 34
   const stForceEndX = stStemEndX + 30
   const sideW = knie ? stForceEndX + 34 : sideLeft + wOuter + sideCRight
+  // bei gerader Anordnung verlängert das Feld die Stange nach unten
+  const extraUnten = knie ? 0 : feldExtra
 
   // ---------------- Vorderansicht (rechts) ----------------
   const gW = tG * s
@@ -158,7 +184,7 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const earsTopS = cy - ehS / 2
 
   // untere Bereiche – Dickenmaße gestuft (jede eigene Maßlinie)
-  const dimY = cy + hHalf + 22
+  const dimY = cy + hHalf + extraUnten + 22
   const tStep = 18
   const tCount = spalt > 0 ? 3 : 2
   const dimY2 = dimY + (tCount - 1) * tStep + 30 // Buchsenlängen darunter
@@ -166,12 +192,19 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
   const fEndYF = rodBottomF + 22
   const legendY = fEndYF + 24
 
-  const sideShaftBottom = cy + hHalf + 54
+  const sideShaftBottom = cy + hHalf + extraUnten + 54
   const sideFEnd = sideShaftBottom + 26
-  const bSdimY = cy + hHalf + 18
+  const bSdimY = cy + hHalf + extraUnten + 18
 
   const H = Math.max(legendY + 8, sideFEnd + 14)
-  const W = xEnd + 40
+  // Breite: Vorderansicht + Splint, aber mindestens die Legendenzeile
+  const legendeLabels = [
+    'Bolzen', 'Gabel', 'Stange',
+    ...(auf ? ['Lasche'] : []),
+    ...(buchseGabelDa || buchseStangeDa ? ['Buchse'] : []),
+  ]
+  const legendeW = legendeLabels.reduce((a, l) => a + 17 + l.length * 6.4 + 12, 0) + 90
+  const W = Math.max(xEnd + 40, xG1 + legendeW)
 
   // Buchse-Band (Front): Breite = tragende Länge ≤ Blechdicke, zentriert
   const bushingF = (xMitte: number, t: number, da: number | null, len: number | null, key: string) => {
@@ -220,6 +253,25 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
           </>
         )}
 
+        {/* Aufdopplung: Lasche (äußeres Blech) + Passbolzenfeld auf der Zugseite */}
+        {auf && (
+          <g>
+            {knie ? (
+              <rect x={sideCx - sEyeW / 2} y={cy - sEyeH / 2} width={sEyeW + feldExtra} height={sEyeH} rx={Math.min(sEyeW, sEyeH) / 2} fill={COL.lasche} stroke={COL.lascheStroke} strokeWidth={1.2} />
+            ) : (
+              <rect x={sideCx - wS / 2} y={cy - ehS / 2} width={wS} height={ehS + feldExtra} rx={Math.min(wS, ehS) / 2} fill={COL.lasche} stroke={COL.lascheStroke} strokeWidth={1.2} />
+            )}
+            {Array.from({ length: auf.nReihen }).flatMap((_, i) =>
+              Array.from({ length: auf.nProReihe }).map((_, j) => {
+                const laengs = randPx + i * teilungPx // Abstand vom Augenrand in Kraftrichtung
+                const quer = (j - (auf.nProReihe - 1) / 2) * teilungPx
+                const px = knie ? sideCx + sEyeW / 2 + laengs : sideCx + quer
+                const py = knie ? cy + quer : cy + ehS / 2 + laengs
+                return <circle key={`${i}-${j}`} cx={px} cy={py} r={rpP} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.2} />
+              }),
+            )}
+          </g>
+        )}
         {rb > 0 && <circle cx={sideCx} cy={cy} r={rb} fill={COL.buchse} stroke={COL.buchseStroke} strokeWidth={1.2} />}
         <circle cx={sideCx} cy={cy} r={rp} fill={COL.bolzen} stroke={COL.bolzenStroke} strokeWidth={1.5} />
 
@@ -281,7 +333,28 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
         <Lasche x={xG2} w={gW} top={earsTopG} h={ehG} fill={earFill} stroke={earStroke} />
 
         <Lasche x={xStange} w={sW} top={earsTopS} h={ehS} fill={rodFill} stroke={rodStroke} />
-        <rect x={xStange + sW / 2 - Math.max(sW * 0.32, 6)} y={cy + ehS / 2} width={Math.max(sW * 0.64, 12)} height={rodBottomF - (cy + ehS / 2)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+        {auf ? (
+          (() => {
+            const tLpx = Math.min(Math.max(auf.tL * s, 3), sW / 3)
+            const hL = knie ? ehS : ehS + feldExtra // Laschen reichen übers Feld
+            return (
+              <>
+                {/* Mittelblech: läuft als Schaft weiter nach unten */}
+                <rect x={xStange + tLpx} y={cy + ehS / 2 - 1} width={sW - 2 * tLpx} height={rodBottomF - (cy + ehS / 2) + 1} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+                {/* Laschen beidseitig */}
+                <rect x={xStange} y={earsTopS} width={tLpx} height={hL} fill={COL.lasche} stroke={COL.lascheStroke} strokeWidth={1} />
+                <rect x={xStange + sW - tLpx} y={earsTopS} width={tLpx} height={hL} fill={COL.lasche} stroke={COL.lascheStroke} strokeWidth={1} />
+                {/* Passbolzen im Schnitt (nur gerade Anordnung sichtbar) */}
+                {!knie &&
+                  Array.from({ length: auf.nReihen }).map((_, i) => (
+                    <rect key={i} x={xStange} y={cy + ehS / 2 + randPx + i * teilungPx - rpP} width={sW} height={2 * rpP} rx={2} fill={COL.bolzen} opacity={0.9} stroke={COL.bolzenStroke} strokeWidth={1} />
+                  ))}
+              </>
+            )
+          })()
+        ) : (
+          <rect x={xStange + sW / 2 - Math.max(sW * 0.32, 6)} y={cy + ehS / 2} width={Math.max(sW * 0.64, 12)} height={rodBottomF - (cy + ehS / 2)} fill={rodFill} stroke={rodStroke} strokeWidth={1.5} />
+        )}
         {/* Kraft F – gerade: Pfeil nach unten · Knie: senkrecht zur Bildebene (⊗) */}
         {knie ? (
           <g stroke={COL.kraft} strokeWidth={2} fill="none">
@@ -412,19 +485,44 @@ export function BolzenDiagram(props: BolzenDiagramProps) {
           <Riss x1={sideCx + rp} y1={cy} x2={sideCx + rp} y2={cy + cG * s} />
         </>
       )}
+      {/* Passbolzenfeld: gestrichelter roter Rahmen ums Feld */}
+      {v.passfeld && auf && (() => {
+        const halbQuer = ((auf.nProReihe - 1) / 2) * teilungPx + rpP + 5
+        const laengs0 = randPx - rpP - 5
+        const laengs1 = randPx + (auf.nReihen - 1) * teilungPx + rpP + 5
+        return knie ? (
+          <rect x={sideCx + sEyeW / 2 + laengs0} y={cy - halbQuer} width={laengs1 - laengs0} height={2 * halbQuer} fill="none" stroke={ROT} strokeWidth={2} strokeDasharray="5 4" rx={4} />
+        ) : (
+          <rect x={sideCx - halbQuer} y={cy + ehS / 2 + laengs0} width={2 * halbQuer} height={laengs1 - laengs0} fill="none" stroke={ROT} strokeWidth={2} strokeDasharray="5 4" rx={4} />
+        )
+      })()}
 
       {/* Legende */}
       <g fontSize="10.5" fill={COL.stroke}>
-        <Legende x={xG1} y={legendY} color={COL.bolzen} label="Bolzen" />
-        <Legende x={xG1 + 66} y={legendY} color={COL.gabel} label="Gabel" />
-        <Legende x={xG1 + 128} y={legendY} color={COL.stange} label="Stange" />
-        {(buchseGabelDa || buchseStangeDa) && <Legende x={xG1 + 196} y={legendY} color={COL.buchse} label="Buchse" />}
-        {Object.values(v).some(Boolean) && (
-          <g>
-            <Riss x1={xG1 + 262} y1={legendY - 3} x2={xG1 + 274} y2={legendY - 3} />
-            <text x={xG1 + 279} y={legendY} stroke="none" fill={ROT}>Versagen</text>
-          </g>
-        )}
+        {(() => {
+          const eintraege = [
+            { color: COL.bolzen, label: 'Bolzen' },
+            { color: COL.gabel, label: 'Gabel' },
+            { color: COL.stange, label: 'Stange' },
+            ...(auf ? [{ color: COL.lasche, label: 'Lasche' }] : []),
+            ...(buchseGabelDa || buchseStangeDa ? [{ color: COL.buchse, label: 'Buchse' }] : []),
+          ]
+          let x = xG1
+          const out = eintraege.map((e) => {
+            const el = <Legende key={e.label} x={x} y={legendY} color={e.color} label={e.label} />
+            x += 17 + e.label.length * 6.4 + 12
+            return el
+          })
+          if (Object.values(v).some(Boolean)) {
+            out.push(
+              <g key="versagen">
+                <Riss x1={x} y1={legendY - 3} x2={x + 12} y2={legendY - 3} />
+                <text x={x + 17} y={legendY} stroke="none" fill={ROT}>Versagen</text>
+              </g>,
+            )
+          }
+          return out
+        })()}
       </g>
     </svg>
       {edit && (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { NumberInput } from '../components/NumberInput'
 import { SelectInput } from '../components/SelectInput'
@@ -15,8 +15,10 @@ import {
   berechneBolzen,
   legeBolzenAus,
   mindestMasse,
+  type AufdopplungConfig,
   type BuchseConfig,
   type BuchseOrt,
+  type PassbolzenFeld,
 } from '../calc/bolzen/bolzen'
 import { fmt } from '../calc/format'
 import type { Einbaufall, Lastfall } from '../calc/types'
@@ -53,12 +55,23 @@ function Toggle({
   )
 }
 
-function AusMass({ label, wert, stark }: { label: string; wert: number; stark?: boolean }) {
+function AusMass({
+  label,
+  wert,
+  stark,
+  children,
+}: {
+  label: string
+  wert: number
+  stark?: boolean
+  /** ersetzt die Standard-Anzeige "wert mm" (z. B. für Stückzahlen) */
+  children?: ReactNode
+}) {
   return (
     <div className="rounded-lg bg-white/70 px-2 py-1.5 ring-1 ring-sky-100">
       <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
       <div className={`tabular-nums ${stark ? 'text-lg font-bold text-sky-700' : 'text-sm font-semibold text-slate-800'}`}>
-        {fmt(wert)} mm
+        {children ?? `${fmt(wert)} mm`}
       </div>
     </div>
   )
@@ -96,6 +109,12 @@ export function BolzenverbindungPage() {
   const [lastfall, setLastfall] = useLocalStorage<Lastfall>('ke.bolzen.lastfall', 'schwellend')
   const [materialId, setMaterialId] = useLocalStorage('ke.bolzen.material', 'S235JR')
 
+  // Optionen – Aufdopplung der Stange (Mittelblech + Laschen + Passbolzen)
+  const [aufOn, setAufOn] = useLocalStorage('ke.bolzen.aufOn', false)
+  const [aufTM, setAufTM] = useLocalStorage('ke.bolzen.aufTM', 10)
+  const [aufTL, setAufTL] = useLocalStorage('ke.bolzen.aufTL', 5)
+  const [aufDP, setAufDP] = useLocalStorage('ke.bolzen.aufDP', 10)
+
   // Optionen – Buchsen
   const [buchseOn, setBuchseOn] = useLocalStorage('ke.bolzen.buchseOn', false)
   const [buchseDaS, setBuchseDaS] = useLocalStorage('ke.bolzen.buchseDaS', 30)
@@ -121,8 +140,13 @@ export function BolzenverbindungPage() {
   const material = MATERIAL_BY_ID.get(materialId) ?? MATERIALS[0]
   const buchseMat = MATERIAL_BY_ID.get(buchseMatId) ?? BUCHSEN_MATERIALS[0]
 
+  // Aufdopplung: im Nachweis-Modus gibt der Nutzer t_M/t_L vor (Paket
+  // t_S = t_M + 2·t_L); in der Auslegung wird die Aufteilung optimal bestimmt.
+  const aufdopplung: AufdopplungConfig | null = aufOn ? { tM: aufTM, tL: aufTL, dP: aufDP } : null
+  const tSEff = aufOn ? aufTM + 2 * aufTL : tS
+
   // Buchsenlänge wahlweise an Blechdicke gekoppelt
-  const lenS = buchseLenGleichT ? tS : buchseLenS
+  const lenS = buchseLenGleichT ? tSEff : buchseLenS
   const lenG = buchseLenGleichT ? tG : buchseLenG
 
   const buchse: BuchseConfig | null = buchseOn
@@ -138,7 +162,7 @@ export function BolzenverbindungPage() {
 
   const gemeinsam = {
     F,
-    tS,
+    tS: tSEff,
     tG,
     bS,
     bG,
@@ -149,24 +173,25 @@ export function BolzenverbindungPage() {
     lastfall,
     material,
     buchse,
+    aufdopplung,
   }
 
   const nachweis = useMemo(
     () => berechneBolzen({ ...gemeinsam, d }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, d, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse],
+    [F, d, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const auslegung = useMemo(
     () => legeBolzenAus(gemeinsam),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [F, tS, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse],
+    [F, tSEff, tG, bS, bG, cS, cG, spalt, einbaufall, lastfall, material, buchse, aufOn, aufTM, aufTL, aufDP],
   )
 
   const ergebnis = modus === 'nachweis' ? nachweis : auslegung.kontrolle
   const aus = modus === 'auslegung'
   const anzeigeD = aus ? auslegung.d : d
-  const anzeigeTS = aus ? auslegung.tS : tS
+  const anzeigeTS = aus ? auslegung.tS : tSEff
   const anzeigeTG = aus ? auslegung.tG : tG
   const anzeigeBS = aus ? auslegung.bS : bS
   const anzeigeBG = aus ? auslegung.bG : bG
@@ -186,14 +211,28 @@ export function BolzenverbindungPage() {
     ausreissGabel: fail((n) => n === 'Ausreißen Gabel'),
     abscherung: fail((n) => n.startsWith('Abscherung')),
     biegung: fail((n) => n === 'Biegung'),
+    passfeld: fail(
+      (n) => n.startsWith('Passbolzen') || n.startsWith('Zug Mittelblech') || n.startsWith('Zug Laschen'),
+    ),
   }
+
+  // Passbolzenfeld des aktuellen Modus (Nachweis oder Auslegungs-Kontrolle)
+  const passfeld: PassbolzenFeld | null = ergebnis.passfeld ?? null
+  // Aufdopplungs-Geometrie für Zeichnung: Nachweis = Eingaben, Auslegung = Ergebnis
+  const anzeigeAuf =
+    aufOn && passfeld
+      ? aus && auslegung.aufdopplung
+        ? { tM: auslegung.aufdopplung.tM, tL: auslegung.aufdopplung.tL, dP: aufDP, nReihen: passfeld.nReihen, nProReihe: passfeld.nProReihe }
+        : { tM: aufTM, tL: aufTL, dP: aufDP, nReihen: passfeld.nReihen, nProReihe: passfeld.nProReihe }
+      : null
 
   // Maße per Klick in der Zeichnung ändern (nur im Nachweis-Modus)
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
   const handleEditDim = (key: DimKey, value: number) => {
     switch (key) {
       case 'd': setD(clamp(Math.round(value), 3, 800)); break
-      case 'tS': setTS(clamp(value, 2, 600)); break
+      // bei Aufdopplung ist t_S das Paket aus t_M + 2·t_L (nicht direkt editierbar)
+      case 'tS': if (!aufOn) setTS(clamp(value, 2, 600)); break
       case 'tG': setTG(clamp(value, 2, 600)); break
       case 'bS': setBS(clamp(value, bMin, 1500)); break
       case 'bG': setBG(clamp(value, bMin, 1500)); break
@@ -238,7 +277,17 @@ export function BolzenverbindungPage() {
 
         {modus === 'nachweis' && (
           <>
-            <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={600} step={1} />
+            {aufOn ? (
+              <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3">
+                <div className="text-xs font-semibold text-indigo-700">
+                  Stange aufgedoppelt · Paket t_S = {fmt(tSEff)} mm
+                </div>
+                <NumberInput label="Mittelblech" symbol="t_M" unit="mm" value={aufTM} onChange={setAufTM} min={2} max={600} step={1} />
+                <NumberInput label="Lasche je Seite" symbol="t_L" unit="mm" value={aufTL} onChange={setAufTL} min={1} max={300} step={1} />
+              </div>
+            ) : (
+              <NumberInput label="Stangendicke" symbol="t_S" unit="mm" value={tS} onChange={setTS} min={2} max={600} step={1} />
+            )}
             <NumberInput label="Gabeldicke (je Lasche)" symbol="t_G" unit="mm" value={tG} onChange={setTG} min={2} max={600} step={1} />
             <NumberInput label="Stangenbreite Steg (⊥ Kraft)" symbol="b_S" unit="mm" value={bS} onChange={setBS} min={d + 2} max={1500} step={1} />
             <NumberInput label="Gabelbreite Steg (je Lasche)" symbol="b_G" unit="mm" value={bG} onChange={setBG} min={d + 2} max={1500} step={1} />
@@ -297,6 +346,20 @@ export function BolzenverbindungPage() {
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Optionen
           </div>
+
+          <Toggle label="Stange aufdoppeln (Laschen + Passbolzen)" checked={aufOn} onChange={setAufOn} />
+          {aufOn && (
+            <div className="space-y-3 border-l-2 border-indigo-300 pl-3">
+              <NumberInput label="Passbolzen-⌀" symbol="d_P" unit="mm" value={aufDP} onChange={setAufDP} min={3} max={100} step={1} />
+              <p className="text-[11px] leading-snug text-slate-500">
+                Mittelblech trägt den Zug über die freie Länge; am Auge doppeln
+                beidseitige Laschen auf. Der Laschenanteil wird auf der Zugseite
+                über ein Passbolzenfeld eingeleitet (Anordnung wird automatisch
+                bestimmt: Teilung 3·d_P, Rand 2·d_P).
+                {modus === 'auslegung' && ' Die Aufteilung t_M/t_L wird in der Auslegung optimal bestimmt.'}
+              </p>
+            </div>
+          )}
 
           <Toggle label="Buchsen einsetzen" checked={buchseOn} onChange={setBuchseOn} />
           {buchseOn && (
@@ -369,6 +432,7 @@ export function BolzenverbindungPage() {
             cG={anzeigeCG}
             spalt={spalt}
             knie={knie}
+            aufdopplung={anzeigeAuf}
             buchseStangeDa={buchseOn && buchseOrt !== 'gabel' ? buchseDaS : null}
             buchseGabelDa={buchseOn && buchseOrt !== 'stange' ? buchseDaG : null}
             buchseLenStange={buchseOn && buchseOrt !== 'gabel' ? lenS : null}
@@ -399,7 +463,19 @@ export function BolzenverbindungPage() {
               <AusMass label="Steg b_G" wert={auslegung.bG} />
               <AusMass label="Rand c_S" wert={auslegung.cS} />
               <AusMass label="Rand c_G" wert={auslegung.cG} />
+              {auslegung.aufdopplung && (
+                <>
+                  <AusMass label="Mittelblech t_M" wert={auslegung.aufdopplung.tM} />
+                  <AusMass label="Lasche t_L" wert={auslegung.aufdopplung.tL} />
+                </>
+              )}
             </div>
+            {auslegung.aufdopplung && !auslegung.aufdopplung.feld && (
+              <p className="mt-2 text-xs font-medium text-amber-600">
+                Aufdopplung nicht erforderlich: Das Mittelblech braucht ohnehin
+                die volle Paketdicke ({fmt(auslegung.aufdopplung.tM)} mm).
+              </p>
+            )}
             <p className="mt-2 text-xs text-slate-500">
               R/M-Richtwert Augenstab: Stegbreite (b−d)/2 ≈ 0,75·d → b ≈ {fmt(Math.round(2.5 * auslegung.d))} mm,
               Kopfhöhe c ≈ 1,1·d → c ≈ {fmt(Math.round(1.1 * auslegung.d))} mm. Maßgebend bleibt der größere
@@ -414,7 +490,7 @@ export function BolzenverbindungPage() {
               Erforderliche Mindestmaße (aus Lochleibung &amp; Zug)
             </h3>
             <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 xl:grid-cols-2">
-              <MindMass label="Dicke t_S" wert={mindest.tSmin} ist={tS} />
+              <MindMass label="Dicke t_S" wert={mindest.tSmin} ist={tSEff} />
               <MindMass label="Dicke t_G" wert={mindest.tGmin} ist={tG} />
               <MindMass label="Steg b_S" wert={mindest.bSmin} ist={bS} />
               <MindMass label="Steg b_G" wert={mindest.bGmin} ist={bG} />
@@ -424,6 +500,31 @@ export function BolzenverbindungPage() {
             <p className="mt-2 text-xs text-slate-400">
               Dicke aus Lochleibung, Steg b aus Zug, Randabstand c aus Ausreißen
               (für ⌀{fmt(anzeigeD)} mm, mit aktueller Dicke). Werte ≥ Mindestmaß.
+            </p>
+          </div>
+        )}
+
+        {passfeld && (
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
+            <h3 className="mb-2 text-sm font-semibold text-slate-800">
+              Passbolzenfeld (Krafteinleitung Laschen, Zugseite)
+            </h3>
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 xl:grid-cols-2">
+              <AusMass label="Anordnung" wert={NaN} stark>
+                {passfeld.nReihen} × {passfeld.nProReihe} Stk
+              </AusMass>
+              <AusMass label="Passbolzen ⌀d_P" wert={aufDP} />
+              <AusMass label="Teilung (3·d_P)" wert={passfeld.teilung} />
+              <AusMass label="Rand längs (2·d_P)" wert={passfeld.randLaengs} />
+              <AusMass label="Feldlänge" wert={passfeld.feldLaenge} />
+              <AusMass label="Laschenanteil F_L" wert={NaN}>
+                {fmt(passfeld.FL / 1000)} kN ({fmt((100 * passfeld.FL) / F, 0)} %)
+              </AusMass>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Erforderlich: {passfeld.nErf} Passbolzen (Abscherung/Lochleibung),
+              verbaut {passfeld.n}. Reihenanzahl begrenzt durch Nettozug des
+              Mittelblechs an der 1. Reihe und die Blechbreite.
             </p>
           </div>
         )}

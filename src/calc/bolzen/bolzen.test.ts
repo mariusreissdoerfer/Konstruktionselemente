@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ZUL_FAKTOREN,
   berechneBolzen,
+  berechnePassbolzenFeld,
   biegemoment,
   bolzenflaeche,
   legeBolzenAus,
@@ -255,5 +257,57 @@ describe('legeBolzenAus – vollständige Auslegung', () => {
       F: 20000, spalt: 10, einbaufall: 1, lastfall: 'schwellend', material: S235,
     })
     expect(mit.dErf).toBeGreaterThan(ohne.dErf)
+  })
+})
+
+describe('Aufdopplung – Passbolzenfeld', () => {
+  const auf = { tM: 10, tL: 5, dP: 10 }
+
+  it('Laschenanteil F_L = F·2t_L/(t_M+2t_L)', () => {
+    const feld = berechnePassbolzenFeld(20000, 40, auf, ZUL_FAKTOREN.schwellend, S235)
+    // 2·5/(10+10) = 0,5 → F_L = 10 kN
+    expect(feld.FL).toBeCloseTo(10000, 6)
+  })
+
+  it('Paketdicke ersetzt t_S in den Auge-Nachweisen', () => {
+    const r = berechneBolzen({ ...base, aufdopplung: auf })
+    const p = r.nachweise.find((n) => n.name === 'Lochleibung Stange')!
+    // t_S = 10+2·5 = 20 → identisch zur base ohne Aufdopplung
+    expect(p.vorhanden).toBeCloseTo(20000 / (20 * 20), 2)
+    expect(r.passfeld).toBeDefined()
+  })
+
+  it('Anordnung: n = nReihen · nProReihe ≥ nErf, Teilung 3·d_P', () => {
+    const feld = berechnePassbolzenFeld(20000, 40, auf, ZUL_FAKTOREN.schwellend, S235)
+    expect(feld.n).toBeGreaterThanOrEqual(feld.nErf)
+    expect(feld.teilung).toBe(30)
+    expect(feld.feldLaenge).toBeCloseTo((feld.nReihen - 1) * 30 + 40, 6)
+  })
+
+  it('zu dünnes Mittelblech → Nettozug an der 1. Reihe versagt', () => {
+    const feld = berechnePassbolzenFeld(200000, 60, { tM: 4, tL: 10, dP: 12 }, ZUL_FAKTOREN.schwellend, S235)
+    const zugM = feld.nachweise.find((n) => n.name.startsWith('Zug Mittelblech'))!
+    expect(zugM.erfuellt).toBe(false)
+  })
+
+  it('Auslegung mit Aufdopplung: Kontrolle besteht, t_M+2t_L ≥ Paket', () => {
+    const r = legeBolzenAus({
+      F: 100000, spalt: 0, einbaufall: 1, lastfall: 'schwellend',
+      material: S235, aufdopplung: { tM: 0, tL: 0, dP: 12 },
+    })
+    expect(r.aufdopplung).toBeTruthy()
+    const a = r.aufdopplung!
+    if (a.feld) {
+      expect(a.tM + 2 * a.tL).toBeGreaterThanOrEqual(r.tS)
+      expect(a.feld.nachweise.every((n) => n.erfuellt)).toBe(true)
+    } else {
+      expect(a.tM).toBe(r.tS)
+    }
+    expect(r.kontrolle.bestanden).toBe(true)
+  })
+
+  it('Auslegung ohne Aufdopplungs-Wunsch liefert kein Feld', () => {
+    const r = legeBolzenAus({ F: 50000, spalt: 0, einbaufall: 1, lastfall: 'schwellend', material: S235 })
+    expect(r.aufdopplung ?? null).toBeNull()
   })
 })
