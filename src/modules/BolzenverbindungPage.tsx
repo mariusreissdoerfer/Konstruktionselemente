@@ -496,10 +496,17 @@ export function BolzenverbindungPage() {
               <MindMass label="Steg b_G" wert={mindest.bGmin} ist={bG} />
               <MindMass label="Rand c_S" wert={mindest.cSmin} ist={cS} />
               <MindMass label="Rand c_G" wert={mindest.cGmin} ist={cG} />
+              {aufOn && mindest.tMmin != null && (
+                <MindMass label="Mittelblech t_M" wert={mindest.tMmin} ist={aufTM} />
+              )}
+              {aufOn && mindest.tLmin != null && (
+                <MindMass label="Lasche t_L" wert={mindest.tLmin} ist={aufTL} />
+              )}
             </div>
             <p className="mt-2 text-xs text-slate-400">
               Dicke aus Lochleibung, Steg b aus Zug, Randabstand c aus Ausreißen
               (für ⌀{fmt(anzeigeD)} mm, mit aktueller Dicke). Werte ≥ Mindestmaß.
+              {aufOn && ' t_M aus Vollquerschnitt (freie Länge) und Nettozug an der 1. Passbolzenreihe; t_L als Rest zum Paket aus Lochleibung (mit aktuellem t_M).'}
             </p>
           </div>
         )}

@@ -311,3 +311,35 @@ describe('Aufdopplung – Passbolzenfeld', () => {
     expect(r.aufdopplung ?? null).toBeNull()
   })
 })
+
+describe('Aufdopplung – Blechdicken-Nachweise', () => {
+  const auf = { tM: 10, tL: 5, dP: 10 }
+
+  it('Zug Mittelblech (freie Länge): σ = F/(b_S·t_M)', () => {
+    const r = berechneBolzen({ ...base, aufdopplung: auf })
+    const n = r.nachweise.find((x) => x.name === 'Zug Mittelblech (freie Länge)')!
+    // 20000/(40·10) = 50 N/mm²
+    expect(n.vorhanden).toBeCloseTo(50, 2)
+    expect(n.zulaessig).toBeCloseTo(0.33 * S235.Rm, 2)
+  })
+
+  it('zu dünnes Mittelblech versagt auf der freien Länge', () => {
+    const r = berechneBolzen({ ...base, F: 200000, aufdopplung: { tM: 3, tL: 10, dP: 10 } })
+    const n = r.nachweise.find((x) => x.name === 'Zug Mittelblech (freie Länge)')!
+    expect(n.erfuellt).toBe(false)
+  })
+
+  it('mindestMasse liefert t_M- und t_L-Mindestwerte', () => {
+    const m = mindestMasse({ ...base, aufdopplung: auf })
+    // Vollquerschnitt: 20000/(40·118,8) = 4,21 mm; Netto 1. Reihe kann mehr fordern
+    expect(m.tMmin).toBeGreaterThanOrEqual(4.2)
+    // Paket aus Lochleibung: t_S,min = 20000/(20·90) = 11,11 → t_L ≥ (11,11−10)/2
+    expect(m.tLmin).toBeCloseTo((20000 / (20 * 0.25 * S235.Rm) - 10) / 2, 1)
+  })
+
+  it('ohne Aufdopplung keine t_M/t_L-Mindestwerte', () => {
+    const m = mindestMasse(base)
+    expect(m.tMmin).toBeUndefined()
+    expect(m.tLmin).toBeUndefined()
+  })
+})

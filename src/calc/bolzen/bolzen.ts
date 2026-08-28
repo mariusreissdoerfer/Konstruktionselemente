@@ -480,7 +480,20 @@ export function berechneBolzen(input: BolzenInput): BolzenErgebnis {
   nachweise.push(ausreissNachweis('Stange', F, tS, dLochS, cS, 2, faktoren, material))
   nachweise.push(ausreissNachweis('Gabel', F, tG, dLochG, cG, 4, faktoren, material))
 
-  // ---- Passbolzenfeld (Krafteinleitung in die Laschen bei Aufdopplung) ----
+  // ---- Aufdopplung: Mittelblech über die freie Länge + Passbolzenfeld ----
+  if (auf && auf.tL > 0) {
+    // Vollquerschnitt des Mittelblechs allein (außerhalb der Laschen trägt
+    // nur t_M die gesamte Kraft) – der Kern der Blechbauweise.
+    nachweise.push(
+      nachweis(
+        'Zug Mittelblech (freie Länge)',
+        'σ_z = F / (b_S · t_M)',
+        `${fmt(F)} / (${fmt(bS)} · ${fmt(auf.tM)})`,
+        F / (bS * auf.tM),
+        sigmaZZul,
+      ),
+    )
+  }
   const passfeld = auf && auf.tL > 0 ? berechnePassbolzenFeld(F, bS, auf, faktoren, material) : undefined
   if (passfeld) nachweise.push(...passfeld.nachweise)
 
@@ -525,6 +538,12 @@ export interface MindestMasse {
   cSmin: number
   /** erforderlicher Randabstand Gabel (je Lasche) aus Ausreißen in mm */
   cGmin: number
+  /** Aufdopplung: erforderliche Mittelblechdicke (Vollquerschnitt freie
+   *  Länge + Nettozug an der 1. Passbolzenreihe) in mm */
+  tMmin?: number
+  /** Aufdopplung: erforderliche Laschendicke je Seite (Rest zum Paket aus
+   *  Lochleibung, mit aktuellem t_M) in mm */
+  tLmin?: number
 }
 
 /**
@@ -547,13 +566,35 @@ export function mindestMasse(input: BolzenInput): MindestMasse {
   const dLochG = buchse && (ort === 'beide' || ort === 'gabel') ? buchse.daGabel : d
 
   const round = (x: number) => Math.round(x * 100) / 100
+  const tSmin = F / (d * pZul)
+
+  // Aufdopplung: Mindestdicken für Mittelblech und Laschen
+  let tMmin: number | undefined
+  let tLmin: number | undefined
+  if (auf && auf.tL > 0) {
+    const { bS } = input
+    // Vollquerschnitt über die freie Länge …
+    let tMerf = F / (bS * sigmaZ)
+    // … und Nettozug an der 1. Passbolzenreihe (volle Kraft F, Lochabzug
+    // mit der Reihenbelegung der aktuellen Konfiguration)
+    const feld = berechnePassbolzenFeld(F, bS, auf, faktoren, material)
+    const netto = bS - feld.nProReihe * auf.dP
+    if (netto > 0) tMerf = Math.max(tMerf, F / (netto * sigmaZ))
+    tMmin = round(tMerf)
+    // Laschen: Rest zum erforderlichen Paket (Lochleibung am Auge), mit
+    // aktuellem t_M
+    tLmin = round(Math.max((tSmin - auf.tM) / 2, 0))
+  }
+
   return {
-    tSmin: round(F / (d * pZul)),
+    tSmin: round(tSmin),
     tGmin: round(F / (2 * d * pZul)),
     bSmin: round(dLochS + F / (tS * sigmaZ)),
     bGmin: round(dLochG + F / (2 * tG * sigmaZ)),
     cSmin: round(randAbstandErf(F, tS, dLochS, 2, faktoren, material)),
     cGmin: round(randAbstandErf(F, tG, dLochG, 4, faktoren, material)),
+    tMmin,
+    tLmin,
   }
 }
 
